@@ -1,0 +1,6 @@
+{
+    "xcom.configParser.iniRoots": ["."],
+    "xcom.configParser.localSrcRoot": ".",
+    "xcom.configParser.buildScriptPath": ".scripts/build.ps1",
+    "xcom.configParser.cachePath": ".xcom2cache/structs/"
+}
