@@ -23,10 +23,15 @@ public sealed class StructMemberValidator
         // Clear negative cache entries from previous (possibly buggy) runs at startup
         _cache.ClearNegativeEntries();
 
-        _varCache = new VariableCache();
+        _varCache = new VariableCache(settings.CachePath);
         _varResolver = new VariableTypeResolver(settings, modSrcCache);
         _structResolver = new StructDefinitionResolver(settings, _cache, modSrcCache);
         _enabled = enabled;
+    }
+
+    public void SaveCache()
+    {
+        _varCache.Save();
     }
 
     /// <summary>

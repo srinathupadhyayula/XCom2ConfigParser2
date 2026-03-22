@@ -129,7 +129,7 @@ public static class OutputFormatter
             };
 
             string color = diagnostic.Severity == DiagnosticSeverity.Error ? "red" : "yellow";
-            console.MarkupLine($"[{color}]{filePath}{diagnostic.Location}: {diagnostic.Code}: {diagnostic.Message}[/]");
+            console.MarkupLine($"[{color}]{Markup.Escape(filePath)}{diagnostic.Location}: {diagnostic.Code}: {Markup.Escape(diagnostic.Message)}[/]");
 
             if (!quiet && !string.IsNullOrEmpty(diagnostic.SourceLine))
             {

@@ -109,7 +109,7 @@ public sealed class ParseCommand : AsyncCommand<ParseCommandSettings>
         {
             if (!File.Exists(cmdSettings.SettingsPath))
             {
-                console.MarkupLine($"[red]Error: Settings file not found: {cmdSettings.SettingsPath}[/]");
+                console.MarkupLine($"[red]Error: Settings file not found: {Markup.Escape(cmdSettings.SettingsPath)}[/]");
                 return 4;
             }
             settingsFile = Path.GetFullPath(cmdSettings.SettingsPath);
@@ -149,7 +149,7 @@ public sealed class ParseCommand : AsyncCommand<ParseCommandSettings>
             if (settings.HasJsonParseError)
             {
                 console.MarkupLine("[red]Error: .vscode/settings.json found but has JSON syntax errors.[/]");
-                console.MarkupLine($"JSON Error: [yellow]{settings.JsonParseErrorMessage}[/]");
+                console.MarkupLine($"JSON Error: [yellow]{Markup.Escape(settings.JsonParseErrorMessage ?? "")}[/]");
             }
             else
             {
@@ -171,7 +171,7 @@ public sealed class ParseCommand : AsyncCommand<ParseCommandSettings>
         {
             structCache.Clear();
             if (!cmdSettings.Quiet)
-                console.MarkupLine($"[dim]Cleared struct cache at: {settings.CachePath}[/]");
+                console.MarkupLine($"[dim]Cleared struct cache at: {Markup.Escape(settings.CachePath)}[/]");
         }
 
         if (!cmdSettings.NoStructValidation)
@@ -202,7 +202,7 @@ public sealed class ParseCommand : AsyncCommand<ParseCommandSettings>
                 if (indexResult.Errors.Count > 0)
                 {
                     foreach (var err in indexResult.Errors)
-                        console.MarkupLine($"[yellow]Warning during indexing:[/] {err}");
+                        console.MarkupLine($"[yellow]Warning during indexing:[/] {Markup.Escape(err)}");
                 }
             }
         }
@@ -227,7 +227,7 @@ public sealed class ParseCommand : AsyncCommand<ParseCommandSettings>
             }
             else
             {
-                console.MarkupLine($"[red]Error: Path '{cmdSettings.Path}' does not exist.[/]");
+                console.MarkupLine($"[red]Error: Path '{Markup.Escape(cmdSettings.Path)}' does not exist.[/]");
                 return 2;
             }
         }
@@ -250,7 +250,7 @@ public sealed class ParseCommand : AsyncCommand<ParseCommandSettings>
                 }
                 else
                 {
-                    console.MarkupLine($"[yellow]Warning: iniRoot '{iniRoot}' does not exist.[/]");
+                    console.MarkupLine($"[yellow]Warning: iniRoot '{Markup.Escape(iniRoot)}' does not exist.[/]");
                 }
             }
         }
@@ -303,6 +303,8 @@ public sealed class ParseCommand : AsyncCommand<ParseCommandSettings>
             }
         }
 
+        processor.SaveCaches();
+
         if (errorLog != null && !string.IsNullOrEmpty(settings.CachePath))
         {
             try
@@ -314,19 +316,19 @@ public sealed class ParseCommand : AsyncCommand<ParseCommandSettings>
                 if (outputMode != OutputMode.Json && outputMode != OutputMode.Quiet)
                 {
                     console.WriteLine();
-                    console.MarkupLine($"📋 Validation report written to: [blue]{logPath}[/]");
+                    console.MarkupLine($"📋 Validation report written to: [blue]{Markup.Escape(logPath)}[/]");
                 }
                 
                 string jsonLogPath = Path.Combine(settings.CachePath, "validation-report.json");
                 ErrorLogWriter.WriteJson(errorLog, jsonLogPath);
                 if (outputMode != OutputMode.Json && outputMode != OutputMode.Quiet)
                 {
-                    console.MarkupLine($"📄 JSON report written to: [blue]{jsonLogPath}[/]");
+                    console.MarkupLine($"📄 JSON report written to: [blue]{Markup.Escape(jsonLogPath)}[/]");
                 }
             }
             catch (Exception ex)
             {
-                console.MarkupLine($"[yellow]Warning: Failed to write log file:[/] {ex.Message}");
+                console.MarkupLine($"[yellow]Warning: Failed to write log file:[/] {Markup.Escape(ex.Message)}");
             }
         }
 

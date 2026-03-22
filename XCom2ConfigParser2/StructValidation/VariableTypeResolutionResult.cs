@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace XCom2ConfigParser2.StructValidation;
 
 /// <summary>
@@ -11,7 +13,8 @@ public sealed class VariableTypeResolutionResult
     public string? ClassFilePath { get; }
     public IReadOnlyList<string> SearchedPaths { get; }
 
-    private VariableTypeResolutionResult(bool found, string? baseType, string? fullType, string? classFilePath, IReadOnlyList<string> searchedPaths)
+    [JsonConstructor]
+    public VariableTypeResolutionResult(bool found, string? baseType, string? fullType, string? classFilePath, IReadOnlyList<string> searchedPaths)
     {
         Found = found;
         BaseType = baseType;

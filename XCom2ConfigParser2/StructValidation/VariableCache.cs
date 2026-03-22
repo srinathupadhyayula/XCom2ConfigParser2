@@ -1,46 +1,147 @@
+using System.Security.Cryptography;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace XCom2ConfigParser2.StructValidation;
 
 /// <summary>
-/// Session-scoped in-memory cache for resolved config variable types.
+/// Persistent cache for resolved config variable types.
 /// Maps (sectionName, propertyName) to a <see cref="VariableTypeResolutionResult"/>.
-///
-/// This cache exists only for the duration of one CLI invocation.
-/// Its purpose: when multiple config files define values for the same
-/// [Package.Class] property, the variable type lookup from the .uc file
-/// only needs to happen once. Subsequent lookups hit this cache.
 /// </summary>
 public sealed class VariableCache
 {
     private readonly record struct CacheKey(string SectionName, string PropertyName);
 
-    private readonly Dictionary<CacheKey, VariableTypeResolutionResult> _cache = new();
+    public sealed class CachedVariableEntry
+    {
+        public VariableTypeResolutionResult Result { get; set; } = null!;
+        public string SourceHash { get; set; } = string.Empty;
+        public DateTime LastIndexed { get; set; }
+    }
 
-    /// <summary>
-    /// Tries to retrieve a previously resolved variable type.
-    /// </summary>
+    private readonly Dictionary<string, Dictionary<string, CachedVariableEntry>> _cache;
+    private readonly string _cacheFile;
+    private readonly TimeSpan _maxAge = TimeSpan.FromHours(24);
+    private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
+    private bool _isDirty = false;
+
+    public VariableCache(string cacheDir)
+    {
+        Directory.CreateDirectory(cacheDir);
+        _cacheFile = Path.Combine(cacheDir, "variables.json");
+        _cache = LoadCache();
+    }
+
+    private Dictionary<string, Dictionary<string, CachedVariableEntry>> LoadCache()
+    {
+        if (!File.Exists(_cacheFile))
+            return new(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            var data = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, CachedVariableEntry>>>(File.ReadAllText(_cacheFile));
+            if (data == null)
+                return new(StringComparer.OrdinalIgnoreCase);
+
+            var dict = new Dictionary<string, Dictionary<string, CachedVariableEntry>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kvp in data)
+            {
+                dict[kvp.Key] = new Dictionary<string, CachedVariableEntry>(kvp.Value, StringComparer.OrdinalIgnoreCase);
+            }
+            return dict;
+        }
+        catch
+        {
+            return new(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    public void Save()
+    {
+        if (!_isDirty)
+            return;
+
+        try
+        {
+            File.WriteAllText(_cacheFile, JsonSerializer.Serialize(_cache, _jsonOptions));
+            _isDirty = false;
+        }
+        catch { /* Ignore IO errors on cache save */ }
+    }
+
+    public void Clear()
+    {
+        _cache.Clear();
+        _isDirty = true;
+        Save();
+    }
+
     public bool TryGet(string sectionName, string propertyName, out VariableTypeResolutionResult result)
     {
-        var key = new CacheKey(
-            sectionName.ToLowerInvariant(),
-            propertyName.ToLowerInvariant());
+        if (_cache.TryGetValue(sectionName, out var props) && props.TryGetValue(propertyName, out var entry))
+        {
+            // Validate age
+            if (DateTime.UtcNow - entry.LastIndexed > _maxAge)
+            {
+                result = null!;
+                return false;
+            }
 
-        return _cache.TryGetValue(key, out result!);
+            // If it's a found variable, validate source file hash
+            if (entry.Result.Found && !string.IsNullOrEmpty(entry.Result.ClassFilePath))
+            {
+                if (!File.Exists(entry.Result.ClassFilePath))
+                {
+                    result = null!;
+                    return false;
+                }
+
+                if (ComputeHash(entry.Result.ClassFilePath) != entry.SourceHash)
+                {
+                    result = null!;
+                    return false;
+                }
+            }
+
+            result = entry.Result;
+            return true;
+        }
+
+        result = null!;
+        return false;
     }
 
-    /// <summary>
-    /// Stores a variable type resolution result (positive or negative).
-    /// </summary>
     public void Set(string sectionName, string propertyName, VariableTypeResolutionResult result)
     {
-        var key = new CacheKey(
-            sectionName.ToLowerInvariant(),
-            propertyName.ToLowerInvariant());
+        if (!_cache.TryGetValue(sectionName, out var props))
+        {
+            props = new Dictionary<string, CachedVariableEntry>(StringComparer.OrdinalIgnoreCase);
+            _cache[sectionName] = props;
+        }
 
-        _cache[key] = result;
+        string hash = "";
+        if (result.Found && !string.IsNullOrEmpty(result.ClassFilePath) && File.Exists(result.ClassFilePath))
+        {
+            hash = ComputeHash(result.ClassFilePath);
+        }
+
+        props[propertyName] = new CachedVariableEntry
+        {
+            Result = result,
+            SourceHash = hash,
+            LastIndexed = DateTime.UtcNow
+        };
+
+        _isDirty = true;
     }
 
-    /// <summary>
-    /// Returns the number of cached entries (for diagnostics/logging).
-    /// </summary>
-    public int Count => _cache.Count;
+    public int Count => _cache.Values.Sum(v => v.Count);
+
+    private static string ComputeHash(string filePath)
+    {
+        using var sha256 = SHA256.Create();
+        using var stream = File.OpenRead(filePath);
+        var hash = sha256.ComputeHash(stream);
+        return "sha256:" + BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+    }
 }

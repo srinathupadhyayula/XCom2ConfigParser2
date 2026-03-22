@@ -42,6 +42,14 @@ public sealed class FileProcessor
     }
 
     /// <summary>
+    /// Saves all underlying caches (e.g., VariableCache) to disk.
+    /// </summary>
+    public void SaveCaches()
+    {
+        _structValidator?.SaveCache();
+    }
+
+    /// <summary>
     /// Processes a single file through the validation pipeline.
     /// </summary>
     public FileProcessingResult ProcessFile(string filePath)
