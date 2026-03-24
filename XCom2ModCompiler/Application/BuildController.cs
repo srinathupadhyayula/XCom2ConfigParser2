@@ -34,6 +34,11 @@ public class BuildController
         "OnlineSubsystemLive", "OnlineSubsystemSteamworks", "OnlineSubsystemPSN"
     };
 
+    /// <summary>
+    /// Logs a specific header when Phase 1 fails as expected due to missing dependencies.
+    /// This failure is common in Two-Pass mods during the first pass and is recovered in Phase 2.
+    /// </summary>
+    /// <param name="compileTarget">The mod package being compiled.</param>
     private void LogPhase1ExpectedFailure(string compileTarget)
     {
         var originalColor = Console.ForegroundColor;
@@ -108,15 +113,15 @@ public class BuildController
     /// <summary>
     /// Prints an info header in cyan.
     /// </summary>
-    private static void PrintInfoHeader(string message)
+    private void PrintInfoHeader(string title, ConsoleColor color = ConsoleColor.White)
     {
+        var originalColor = Console.ForegroundColor;
+        Console.ForegroundColor = color;
+        Console.WriteLine("========================================");
+        Console.WriteLine($"  {title}");
+        Console.WriteLine("========================================");
         Console.WriteLine();
-        Console.WriteLine(Separator);
-        Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.WriteLine($"  {message}");
-        Console.ResetColor();
-        Console.WriteLine(Separator);
-        Console.WriteLine();
+        Console.ForegroundColor = originalColor;
     }
 
     /// <summary>
@@ -909,7 +914,25 @@ public class BuildController
     private async Task CopySrcFolderAsync(string includeDir, string sdkDevSrcPath, Dictionary<string, (string Path, int Line)> definedMacros, CancellationToken ct)
     {
         if (!Directory.Exists(includeDir)) return;
+        
+        _logger.LogInformation($"Mirroring sources from {includeDir} to {sdkDevSrcPath}");
         await CopyDirectoryRecursiveAsync(includeDir, sdkDevSrcPath, ct);
+
+        // Replicate build_common.ps1 logic for extra_globals.uci sonora.
+        var extraGlobalsFile = Path.Combine(includeDir, "extra_globals.uci");
+        if (File.Exists(extraGlobalsFile))
+        {
+            var targetGlobalsFile = Path.Combine(sdkDevSrcPath, "Core", "Globals.uci");
+            _logger.LogInformation($"Appending {extraGlobalsFile} to {targetGlobalsFile}");
+            
+            var sb = new StringBuilder();
+            sb.AppendLine();
+            sb.AppendLine($"// Macros included from {extraGlobalsFile}");
+            sb.AppendLine(await File.ReadAllTextAsync(extraGlobalsFile, ct));
+            
+            await File.AppendAllTextAsync(targetGlobalsFile, sb.ToString(), ct);
+            ParseMacroFile(extraGlobalsFile, definedMacros);
+        }
     }
 
     private void ParseMacroFile(string filePath, Dictionary<string, (string Path, int Line)> definedMacros)
@@ -923,11 +946,25 @@ public class BuildController
         }
     }
 
+    /// <summary>
+    /// Executes the two-pass compilation flow. 
+    /// Phase 1 builds the base mod binary (even if it fails linkage).
+    /// Phase 2 compiles the mod along with its dependent packages using the newly created binary.
+    /// This mirrors the successful manual PowerShell build pattern.
+    /// </summary>
+    /// <param name="iniHandler">The INI handler for configuration stability.</param>
+    /// <param name="targetIni">The path to the SDK's XComEngine.ini.</param>
+    /// <param name="originalContent">The original content of the INI before modification.</param>
+    /// <param name="dependentPackages">The list of dependent mods that require linkage.</param>
+    /// <param name="receiver">The output receiver for compilation logs.</param>
+    /// <param name="ct">The cancellation token.</param>
     private async Task ExecuteTwoPassCompilationAsync(IniHandler iniHandler, string targetIni, string originalContent, List<string> dependentPackages, OutputReceiver receiver, CancellationToken ct)
     {
         PrintInfoHeader("STARTING TWO-PASS COMPILATION FLOW");
         _logger.LogInformation("Starting Two-Pass compilation flow (Mirroring Manual PowerShell Execution)");
         
+        // Prepare INI once for BOTH passes to ensure environment stability.
+        // This prevents Unreal from deleting binaries or re-compiling unnecessarily between runs.
         string passContent = iniHandler.PrepareModCompilationIni(originalContent, _options.ModNameCanonical, dependentPackages);
         await File.WriteAllTextAsync(targetIni, passContent, ct);
 
@@ -948,19 +985,41 @@ public class BuildController
         await ExecuteCompilationPassAsync(iniHandler, targetIni, originalContent, dependentPackages, passContent, receiver, ct, passNumber: 2);
     }
 
+    /// <summary>
+    /// Executes a single phase of the compilation flow.
+    /// Phase 1 uses a forced-failure recovery mechanism to ensure the binary is created.
+    /// </summary>
+    /// <param name="iniHandler">The INI handler.</param>
+    /// <param name="targetIni">The path to the target INI.</param>
+    /// <param name="originalContent">Original INI content.</param>
+    /// <param name="dependentPackages">List of dependent packages.</param>
+    /// <param name="passContent">The prepared INI content for the mod build.</param>
+    /// <param name="receiver">The output receiver.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <param name="passNumber">The phase number (1 or 2).</param>
     private async Task<bool> ExecuteCompilationPassAsync(IniHandler iniHandler, string targetIni, string originalContent, List<string> dependentPackages, string passContent, OutputReceiver receiver, CancellationToken ct, int passNumber)
     {
+        // 1. Prepare environment for base compilation (Mod removed from INI)
         string baseIniContent = PrepareBaseIniContent(originalContent, _options.ModNameCanonical);
         await File.WriteAllTextAsync(targetIni, baseIniContent, ct);
         if (!await _compiler.CompileBaseAsync(_options, receiver, ct)) return false;
+
+        // 2. Restore mod environment for mod compilation
         await File.WriteAllTextAsync(targetIni, passContent, ct);
+        
+        // Small delay in Phase 2 to ensure file handles are released by the commandlet from Phase 1
         if (passNumber == 2) await Task.Delay(5000, ct);
+
         string compileTarget = _options.ModNameCanonical;
         bool success = false;
         try { success = await _compiler.CompileModAsync(compileTarget, _options.StagingPath, _options, receiver, ct); }
-        catch (Exception ex) when (passNumber == 1) { success = false; }
+        catch (Exception) when (passNumber == 1) { success = false; }
+
         if (!success && passNumber == 1)
         {
+            // Phase 1 Forced failure recovery logic:
+            // If the .u file was successfully created, we consider it a "successful" first pass
+            // as linkage failure is expected during initial creation of Two-Pass mods.
             if (File.Exists(Path.Combine(_options.SdkPath, "XComGame", "Script", $"{_options.ModNameCanonical}.u")))
             {
                 LogPhase1ExpectedFailure(compileTarget);
@@ -983,17 +1042,24 @@ public class BuildController
         return true;
     }
 
+    /// <summary>
+    /// Executes a standard single-pass compilation.
+    /// Per user request, the SDK's XComEngine.ini is NOT modified during this flow.
+    /// </summary>
     private async Task ExecuteSinglePassCompilationAsync(IniHandler iniHandler, string targetIni, string originalContent, OutputReceiver receiver, CancellationToken ct)
     {
+        // For single-pass compilation, we do NOT modify the SDK INI as per user request. sonora.
         var dependentPackages = iniHandler.GetDependantPackages(originalContent);
-        string passContent = iniHandler.PrepareModCompilationIni(originalContent, _options.ModNameCanonical, dependentPackages);
-        await File.WriteAllTextAsync(targetIni, passContent, ct);
-        string baseIniContent = PrepareBaseIniContent(originalContent, _options.ModNameCanonical);
-        await File.WriteAllTextAsync(targetIni, baseIniContent, ct);
+        
+        PrintInfoHeader("STARTING SINGLE-PASS COMPILATION FLOW");
+        _logger.LogInformation("Starting Single-Pass compilation flow (INI remains untouched)");
+
+        // We still need to compile base if requested or needed, but typically we just compile the mod.
         if (!await _compiler.CompileBaseAsync(_options, receiver, ct)) throw new BuildFailureException("Base script compilation", 1);
-        await File.WriteAllTextAsync(targetIni, passContent, ct);
+        
         var compileTarget = _options.ModNameCanonical;
         if (dependentPackages.Count > 0) compileTarget = $"{_options.ModNameCanonical} {string.Join(" ", dependentPackages)}";
+        
         if (!await _compiler.CompileModAsync(compileTarget, _options.StagingPath, _options, receiver, ct)) throw new BuildFailureException("Mod script compilation", 1);
     }
 

@@ -9,7 +9,9 @@
 ## Executive Summary
 
 ### Current State
+
 The solution contains **4 separate projects**:
+
 1. **XCom2ConfigParser2** - Config file validation tool (48 source files, .NET 10.0)
 2. **XCom2ConfigParser2.Tests** - Config parser tests (16 test files, xUnit)
 3. **XCom2ModCompiler** - Mod build system (26 source files, .NET 8.0-windows)
@@ -18,6 +20,7 @@ The solution contains **4 separate projects**:
 ### Recommendation: **HIGHLY FEASIBLE** with moderate effort
 
 The unification is **technically straightforward** because:
+
 - Both projects target compatible .NET versions (unify to **.NET 10.0** - latest LTS)
 - Both use identical test frameworks (xUnit)
 - Both use Spectre.Console.Cli for CLI
@@ -28,6 +31,7 @@ The unification is **technically straightforward** because:
 ### 🎯 Updated Recommendation: .NET 10.0 + Modern Libraries
 
 **Target Framework:** **.NET 10.0** (not .NET 8.0)
+
 - XCom2ConfigParser2 already targets .NET 10.0
 - .NET 10.0 is the latest LTS (Long-Term Support) release
 - Better performance, modern C# 13 features
@@ -93,6 +97,7 @@ The unification presents an opportunity to adopt **modern, high-performance .NET
 | **ZString** | `ZString` | 1,500+ | Zero-allocation StringBuilder | ❌ Not needed |
 
 **Recommended Adoptions:**
+
 1. **ZLogger** - Already used, keep it
 2. **Kokuban** - Already used for console coloring, keep it
 3. **MemoryPack** - For cache serialization (StructCache, VariableCache)
@@ -100,6 +105,7 @@ The unification presents an opportunity to adopt **modern, high-performance .NET
 5. **UniTask** - Optional, for async-heavy operations (more relevant for Unity)
 
 **Not Recommended:**
+
 - **ZString** - Not needed (ZLogger doesn't require it, not used for console output)
 - **R3** - Overkill for this use case (no reactive streams needed)
 - **ObservableCollections** - Only useful for UI binding (WPF/Blazor), not CLI apps
@@ -108,6 +114,7 @@ The unification presents an opportunity to adopt **modern, high-performance .NET
 ### 1.2 XCom2ConfigParser2 Deep Dive
 
 #### Purpose
+
 Validates XCOM 2 config (.ini) files against UE3 grammar rules and validates struct members against UnrealScript definitions.
 
 #### Architecture Layers
@@ -194,6 +201,7 @@ OutputFormatter (console/JSON/log file)
 ### 1.3 XCom2ModCompiler Deep Dive
 
 #### Purpose
+
 Complete mod build system that orchestrates script compilation, asset cooking, and mod packaging for XCOM 2.
 
 #### Architecture Layers
@@ -289,6 +297,7 @@ XCom2ModCompiler/
 #### XCom2ConfigParser2.Tests
 
 **Test Framework Stack:**
+
 - xUnit 2.9.3
 - Shouldly 4.3.0 (fluent assertions)
 - NSubstitute 5.1.0 (mocking)
@@ -304,6 +313,7 @@ XCom2ModCompiler/
 | Other | 2 | StructField, temporary tests |
 
 **Test Pattern:**
+
 ```csharp
 public class SyntaxValidatorTests
 {
@@ -326,6 +336,7 @@ public class SyntaxValidatorTests
 #### XCom2ModCompiler.Tests
 
 **Test Framework Stack:**
+
 - xUnit 2.9.3
 - Moq 4.20.72 (mocking)
 - No Shouldly (uses xUnit assertions)
@@ -341,6 +352,7 @@ public class SyntaxValidatorTests
 | Utility Tests | 9 | ProcessRunner, FileMirror, IniHandler, ProjectSynchronizer, etc. |
 
 **Test Pattern:**
+
 ```csharp
 public class BuildControllerTests
 {
@@ -405,7 +417,7 @@ public void DiscoverAndValidate(string projectRoot, List<string> iniRoots)
 }
 ```
 
-The `IniHandler` class already performs config file discovery and parsing for the `[X2Compiler.DependantPackages]` section. This is **conceptually identical** to what XCom2ConfigParser2 does.
+The `IniHandler` class already performs config file discovery and parsing for the `[X2ModCompiler.DependantPackages]` section. This is **conceptually identical** to what XCom2ConfigParser2 does.
 
 ### 2.2 Natural Integration Points
 
@@ -509,12 +521,14 @@ X2ModCompiler.sln
 ```
 
 **Pros:**
+
 - Clean separation of concerns
 - Config parser can be used standalone or as library
 - Minimal code changes required
 - Tests can remain separate or be combined
 
 **Cons:**
+
 - Two executables (can be mitigated with Option C)
 
 #### Option B: Full Merger (AGGRESSIVE)
@@ -538,11 +552,13 @@ X2ModCompiler/
 ```
 
 **Pros:**
+
 - Single project, single executable
 - No project reference complexity
 - Unified test project
 
 **Cons:**
+
 - Large project (74 source files)
 - Harder to maintain separation
 - Breaking change for config parser CLI users
@@ -572,16 +588,19 @@ X2ModCompiler.sln
 #### Phase 1: Preparation (1-2 hours)
 
 **Step 1.1: Unify Target Framework**
+
 - Decision: Target **.NET 8.0** (LTS, Windows-specific for ModCompiler)
 - Change XCom2ConfigParser2 from net10.0 to net8.0
 - Rationale: XCom2ModCompiler requires Windows (unreal tools, robocopy)
 
 **Step 1.2: Consolidate NuGet Packages**
+
 - Create `Directory.Packages.props` for centralized package management
 - Unify Spectre.Console.Cli versions (use 0.53.1)
 - Add ZLogger to config parser for consistent logging
 
 **Step 1.3: Resolve Duplicate ParserSettings**
+
 - Keep XCom2ConfigParser2.Configuration.ParserSettings as canonical
 - Remove duplicate from XCom2ModCompiler
 - Update XCom2ModCompiler to reference via project reference
@@ -718,6 +737,7 @@ public bool TreatConfigWarningsAsErrors { get; init; }
 **Step 4.1: Create Combined Test Project**
 
 Option A: Keep separate (RECOMMENDED for now)
+
 ```
 X2ModCompiler.sln
 ├── XCom2ConfigParser2.Core.Tests/
@@ -725,6 +745,7 @@ X2ModCompiler.sln
 ```
 
 Option B: Merge into single test project
+
 ```
 X2ModCompiler.Tests/
 ├── ConfigValidation/
@@ -740,6 +761,7 @@ X2ModCompiler.Tests/
 **Step 4.2: Update Test Projects**
 
 If merging:
+
 ```xml
 <!-- X2ModCompiler.Tests.csproj -->
 <ItemGroup>
@@ -772,6 +794,7 @@ If merging:
 **Step 5.2: Update Project Paths**
 
 Move projects into logical folders:
+
 ```
 X2ModCompiler/
 ├── src/
@@ -800,6 +823,7 @@ XCom2ModCompiler.csproj
 ```
 
 **Changes Required:**
+
 1. Add project reference
 2. Remove duplicate ParserSettings from ModCompiler
 3. Add config validation step to BuildController
@@ -814,12 +838,14 @@ XCom2ModCompiler.csproj
 ### 4.1 Challenge: Framework Version Decision ✅ RESOLVED
 
 **Problem:**
+
 - XCom2ConfigParser2: .NET 10.0 ✅
 - XCom2ModCompiler: .NET 8.0-windows
 
 **Decision: Unify to .NET 10.0** (not .NET 8.0)
 
 **Rationale:**
+
 1. **XCom2ConfigParser2 already targets .NET 10.0** - no changes needed
 2. **.NET 10.0 is the latest LTS** (Long-Term Support) release from Microsoft
 3. **C# 13 features** available (primary constructors, collection expressions, etc.)
@@ -829,6 +855,7 @@ XCom2ModCompiler.csproj
 7. **No downgrades needed** - upgrade ModCompiler instead
 
 **Code Changes:**
+
 ```xml
 <!-- XCom2ModCompiler.csproj - UPDATE -->
 <TargetFramework>net10.0-windows</TargetFramework>
@@ -836,6 +863,7 @@ XCom2ModCompiler.csproj
 ```
 
 **Migration Notes:**
+
 - .NET 8.0 → .NET 10.0 is a smooth upgrade (no breaking changes)
 - All existing NuGet packages support .NET 10.0
 - Windows-specific APIs remain available with `-windows` suffix
@@ -843,15 +871,18 @@ XCom2ModCompiler.csproj
 ### 4.2 Challenge: Spectre.Console Version Mismatch
 
 **Problem:**
+
 - XCom2ConfigParser2: Spectre.Console.Cli 0.53.1
 - XCom2ModCompiler: Spectre.Console.Cli 0.48.0
 
 **Solution:**
+
 - **Upgrade both to Spectre.Console.Cli 0.54.0+** (latest stable)
 - Spectre.Console.Cli 0.54.0 moved to a separate package (better modularity)
 - No breaking changes from 0.48.0 → 0.54.0
 
 **Code Changes:**
+
 ```xml
 <!-- Directory.Packages.props -->
 <PackageVersion Include="Spectre.Console" Version="0.54.0" />
@@ -861,16 +892,19 @@ XCom2ModCompiler.csproj
 ### 4.3 Challenge: Logging Abstraction
 
 **Problem:**
+
 - XCom2ConfigParser2: Direct console output (AnsiConsole)
 - XCom2ModCompiler: ZLogger + Microsoft.Extensions.Logging
 
 **Solution:**
+
 - **Keep ZLogger** (Cysharp's zero-allocation logger) - it's already modern and fast
 - Add `ILogger<FileProcessor>` to FileProcessor constructor
 - Use dependency injection for logging
 - Maintain backward compatibility with optional logger parameter
 
 **Code Changes:**
+
 ```csharp
 // FileProcessor.cs
 public sealed class FileProcessor
@@ -897,6 +931,7 @@ public sealed class FileProcessor
 ```
 
 **Why ZLogger is Already Great:**
+
 - Zero-allocation logging (Cysharp quality)
 - Source generator support (compile-time formatting)
 - Built-in JSON, MessagePack formatters
@@ -907,10 +942,12 @@ public sealed class FileProcessor
 ### 4.4 Challenge: Duplicate ParserSettings
 
 **Problem:**
+
 - Identical class in both projects
 - XCom2ModCompiler has its own copy
 
 **Solution:**
+
 - Remove duplicate from XCom2ModCompiler
 - Add project reference to XCom2ConfigParser2.Core
 - Update namespace: `using XCom2ConfigParser2.Configuration;`
@@ -918,16 +955,19 @@ public sealed class FileProcessor
 ### 4.5 Challenge: Test Framework Differences
 
 **Problem:**
+
 - Config Parser Tests: xUnit 2.9.3 + Shouldly + NSubstitute
 - Mod Compiler Tests: xUnit 2.9.3 + Moq
 
 **Solution:**
+
 - **Upgrade to xUnit v3 3.0+** (latest major version)
 - **Standardize on NSubstitute 5.1.0+** (more modern API than Moq)
 - Keep Shouldly for fluent assertions (optional)
 - Remove Moq (NSubstitute is sufficient)
 
 **Code Changes:**
+
 ```xml
 <!-- Directory.Packages.props -->
 <PackageVersion Include="xunit" Version="3.0.0" />
@@ -937,6 +977,7 @@ public sealed class FileProcessor
 ```
 
 **xUnit v3 Benefits:**
+
 - Modern API (closer to MSTest)
 - Better performance
 - Improved async support
@@ -945,10 +986,12 @@ public sealed class FileProcessor
 ### 4.6 Challenge: Build Output Conflicts
 
 **Problem:**
+
 - Both projects output executables
 - Potential naming conflicts
 
 **Solution:**
+
 - Rename XCom2ConfigParser2 executable to `X2ConfigParser.exe`
 - Keep XCom2ModCompiler as `X2ModCompiler.exe`
 - Or use single executable with multiple commands
@@ -956,10 +999,12 @@ public sealed class FileProcessor
 ### 4.7 Challenge: Cache Serialization Modernization 🆕
 
 **Problem:**
+
 - StructCache and VariableCache use System.Text.Json
 - Could be faster and more efficient
 
 **Solution:**
+
 - **Adopt MemoryPack 1.21+** for cache serialization
 - 10x faster serialization
 - Zero-encoding design (direct memory copy)
@@ -967,6 +1012,7 @@ public sealed class FileProcessor
 - Version-tolerant support
 
 **Code Changes:**
+
 ```csharp
 // StructCache.cs - BEFORE
 using System.Text.Json;
@@ -988,6 +1034,7 @@ public void Save()
 ```
 
 **Benefits:**
+
 - 5-10x faster cache save/load
 - Smaller cache files (better compression)
 - Zero-allocation during serialization
@@ -1230,6 +1277,7 @@ D:\Projects\Active\Mods\XCOM2_WOTC\Xcom2Modding\X2ModCompiler\
 ## Part 7: Implementation Checklist
 
 ### Phase 1: Preparation
+
 - [ ] Create docs directory
 - [ ] Backup current solution
 - [ ] Create new solution file (X2ModCompiler.slnx)
@@ -1239,6 +1287,7 @@ D:\Projects\Active\Mods\XCOM2_WOTC\Xcom2Modding\X2ModCompiler\
 - [ ] **Run baseline tests** (ensure 350+ tests pass)
 
 ### Phase 2: Library Extraction
+
 - [ ] Convert XCom2ConfigParser2.csproj to XCom2ConfigParser2.Core.csproj
 - [ ] Change OutputType to Library
 - [ ] Update target framework to net10.0
@@ -1249,6 +1298,7 @@ D:\Projects\Active\Mods\XCOM2_WOTC\Xcom2Modding\X2ModCompiler\
 - [ ] **Write unit tests for extracted library** (TDD approach)
 
 ### Phase 3: Integration
+
 - [ ] Add project reference to X2ModCompiler.csproj
 - [ ] Remove duplicate ParserSettings from X2ModCompiler
 - [ ] Update BuildController to use Core library
@@ -1258,6 +1308,7 @@ D:\Projects\Active\Mods\XCOM2_WOTC\Xcom2Modding\X2ModCompiler\
 - [ ] **Write integration tests** (see TDD_STRATEGY.md Part 2)
 
 ### Phase 4: Testing
+
 - [ ] Run XCom2ConfigParser2 tests
 - [ ] Run XCom2ModCompiler tests
 - [ ] Test integrated build pipeline
@@ -1267,6 +1318,7 @@ D:\Projects\Active\Mods\XCOM2_WOTC\Xcom2Modding\X2ModCompiler\
 - [ ] **Verify code coverage > 80%**
 
 ### Phase 5: Cleanup
+
 - [ ] Remove old solution file
 - [ ] Update documentation
 - [ ] Update CI/CD scripts
@@ -1280,6 +1332,7 @@ D:\Projects\Active\Mods\XCOM2_WOTC\Xcom2Modding\X2ModCompiler\
 ### Feasibility: **HIGH** ✅
 
 The unification is highly feasible because:
+
 1. **Natural dependency**: Config parsing is already used by the compiler
 2. **Compatible technologies**: Same test frameworks, similar libraries
 3. **Clean architecture**: Well-separated concerns in both projects
@@ -1311,6 +1364,7 @@ The unification is highly feasible because:
 | **Mocking** | NSubstitute | 5.1.0+ | Modern mocking API |
 
 **Not Recommended:**
+
 - **ZString** - Not needed (ZLogger doesn't require it)
 - **R3** - Overkill (no reactive streams needed)
 - **ObservableCollections** - UI binding only (not for CLI apps)
@@ -1379,6 +1433,7 @@ The unification is highly feasible because:
 ### Library Details
 
 #### ZLogger (Already in Use)
+
 - **NuGet:** `ZLogger`
 - **Version:** 2.5.10
 - **Purpose:** Zero-allocation structured logging
@@ -1386,6 +1441,7 @@ The unification is highly feasible because:
 - **Features:** Source generator, JSON/MessagePack formatters, rolling files
 
 #### Kokuban (Already in Use)
+
 - **NuGet:** `Kokuban`
 - **Version:** 0.2.0
 - **Purpose:** Terminal string styling
@@ -1394,6 +1450,7 @@ The unification is highly feasible because:
 - **Example:** `Console.WriteLine(Kokuban.Green["Success!"])`
 
 #### MemoryPack (Recommended)
+
 - **NuGet:** `MemoryPack`
 - **Version:** 1.21.4
 - **Purpose:** Zero-encoding binary serializer
@@ -1420,12 +1477,14 @@ var loaded = MemoryPackSerializer.Deserialize<CachedStructDef>(bytes);
 ```
 
 **Benefits:**
+
 - 10x faster than System.Text.Json
 - 3-5x smaller file size
 - Zero-encoding (direct memory copy where possible)
 - Version-tolerant (can handle schema changes)
 
 #### ZLinq (Optional)
+
 - **NuGet:** `ZLinq`
 - **Version:** 1.5.5
 - **Purpose:** Zero-allocation LINQ
@@ -1445,6 +1504,7 @@ var result = array.AsValueEnumerable()
 ```
 
 #### UniTask (Optional - Unity-focused)
+
 - **NuGet:** `UniTask`
 - **Version:** 2.5.10
 - **Purpose:** Zero-allocation async/await
@@ -1454,16 +1514,18 @@ var result = array.AsValueEnumerable()
 ### Not Recommended for This Project
 
 #### ZString
+
 - **NuGet:** `ZString`
 - **Version:** 2.6.0
 - **Purpose:** Zero-allocation StringBuilder
-- **Why not needed:** 
+- **Why not needed:**
   - ZLogger does NOT require ZString
   - ZLogger uses System.Text.Json internally for UTF8 formatting
   - Console output doesn't need zero-allocation string building
   - Spectre.Console handles string formatting
 
 #### R3
+
 - **NuGet:** `R3`
 - **Version:** 1.0.x
 - **Purpose:** Modern Reactive Extensions
@@ -1473,6 +1535,7 @@ var result = array.AsValueEnumerable()
   - Adds unnecessary complexity
 
 #### ObservableCollection
+
 - **NuGet:** `ObservableCollections`
 - **Version:** 3.3.4
 - **Purpose:** High-performance observable collections
