@@ -13,6 +13,13 @@ using Kokuban;
 
 namespace XCom2ModCompiler.Application;
 
+/// <summary>
+/// Orchestrates the entire XCOM 2 mod build pipeline.
+/// This class coordinates mirroring source files, compiling script packages,
+/// cooking assets, precompiling shaders, and deploying the final mod artifacts.
+/// It supports both single-pass and two-pass compilation strategies to ensure
+/// compatibility with mods that have circular or complex dependencies.
+/// </summary>
 public class BuildController
 {
     private readonly BuildOptions _options;
@@ -54,6 +61,19 @@ public class BuildController
     private const string Separator = "========================================";
     private const string ThinSeparator = "----------------------------------------";
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BuildController"/> class.
+    /// </summary>
+    /// <param name="options">The global build configuration and path options.</param>
+    /// <param name="logger">The logger for build diagnostics.</param>
+    /// <param name="tracker">The build tracker for maintaining incremental build state.</param>
+    /// <param name="compiler">The script compiler for invoking UnrealEd make commandlets.</param>
+    /// <param name="cooker">The asset cooker for processing content packages.</param>
+    /// <param name="mirror">The file mirroring service for efficient file operations.</param>
+    /// <param name="runner">The process runner for executing external tools.</param>
+    /// <param name="shaderPrecompiler">The shader precompiler for D3D shader management.</param>
+    /// <param name="missingUncookedCopier">Service to copy missing dependency packages.</param>
+    /// <param name="projectSynchronizer">Service to synchronize .x2proj file items.</param>
     public BuildController(BuildOptions options, ILogger<BuildController> logger, BuildTracker tracker, ScriptCompiler compiler, AssetCooker cooker, IFileMirrorParity mirror, IProcessRunner runner, ShaderPrecompiler shaderPrecompiler, MissingUncookedCopier missingUncookedCopier, ProjectSynchronizer projectSynchronizer)
     {
         _options = options;
@@ -138,12 +158,19 @@ public class BuildController
         Console.WriteLine();
     }
 
+    /// <summary>
+    /// Enables debug mode for the current build session.
+    /// </summary>
     public void EnableDebug()
     {
         _options.Debug = true;
         _CheckFlags();
     }
 
+    /// <summary>
+    /// Enables final release mode for the current build session.
+    /// This enables optimizations and strips debug information.
+    /// </summary>
     public void EnableFinalRelease()
     {
         _options.FinalRelease = true;
@@ -162,9 +189,28 @@ public class BuildController
         }
     }
 
+    /// <summary>
+    /// Sets the Steam Workshop ID for the mod.
+    /// </summary>
+    /// <param name="id">The workshop ID.</param>
     public void SetWorkshopId(long id) => _options.WorkshopId = id;
+
+    /// <summary>
+    /// Includes an additional source directory in the build process.
+    /// </summary>
+    /// <param name="path">The absolute path to the source directory.</param>
     public void IncludeSrc(string path) => _options.IncludePaths.Add(path);
+
+    /// <summary>
+    /// Adds a mod name to the list of mods to be cleaned before building.
+    /// </summary>
+    /// <param name="modName">The canonical name of the mod.</param>
     public void AddToClean(string modName) => _options.CleanMods.Add(modName);
+
+    /// <summary>
+    /// Sets the filename for the content options JSON configuration.
+    /// </summary>
+    /// <param name="filename">The filename (e.g., "ContentOptions.json").</param>
     public void SetContentOptionsJson(string filename) => _options.ContentOptionsJson = filename;
 
     /// <summary>
@@ -261,6 +307,11 @@ public class BuildController
         }
     }
 
+    /// <summary>
+    /// Triggers the full mod build pipeline asynchronously.
+    /// </summary>
+    /// <param name="ct">A cancellation token to abort the build.</param>
+    /// <returns>A <see cref="BuildResult"/> containing the success status and timing metadata.</returns>
     public async Task<BuildResult> InvokeBuildAsync(CancellationToken ct = default)
     {
         var sw = Stopwatch.StartNew();
@@ -707,6 +758,11 @@ public class BuildController
         _logger.LogInformation(TableFormatter.Format(report));
     }
 
+    /// <summary>
+    /// Triggers the clean process to remove all build artifacts and cached file states.
+    /// </summary>
+    /// <param name="ct">A cancellation token to abort the clean operation.</param>
+    /// <returns>A <see cref="CleanResult"/> containing the list of deleted paths.</returns>
     public async Task<CleanResult> InvokeCleanAsync(CancellationToken ct = default)
     {
         Console.WriteLine($"Deleting all cached build artifacts for {_options.ModNameCanonical}...");
@@ -811,6 +867,10 @@ public class BuildController
         return new CleanResult(true, deletedPaths, new());
     }
 
+    /// <summary>
+    /// Validates that the required build configuration paths exist on the file system.
+    /// </summary>
+    /// <exception cref="BuildConfigurationException">Thrown if paths are missing or invalid.</exception>
     private void ValidateConfiguration()
     {
         if (string.IsNullOrWhiteSpace(_options.SdkPath) || !Directory.Exists(_options.SdkPath))
@@ -834,6 +894,12 @@ public class BuildController
         }
     }
 
+    /// <summary>
+    /// Triggers the UnrealEd commandlet to cook Highlander-specific packages.
+    /// This is only executed for mods that contain native script packages.
+    /// </summary>
+    /// <param name="modScriptPackages">The list of mod script packages.</param>
+    /// <param name="ct">The cancellation token.</param>
     private async Task CookHighlanderPackagesAsync(string[] modScriptPackages, CancellationToken ct)
     {
         var commandletPath = Path.Combine(_options.SdkPath, "binaries", "Win64", "XComGame.com");
@@ -844,8 +910,18 @@ public class BuildController
         if (exitCode != 0) throw new BuildFailureException("Highlander cooking", exitCode);
     }
 
+    /// <summary>
+    /// Determines if any of the provided packages are identified as "native"
+    /// requiring special handling during compilation or cooking.
+    /// </summary>
     private bool HasNativePackages(string[] modScriptPackages) => modScriptPackages.Any(name => _nativeScriptPackages.Contains(name, StringComparer.OrdinalIgnoreCase));
 
+    /// <summary>
+    /// Parses the provided INI content to extract all mod-specific script packages
+    /// defined in the 'ModEditPackages' keys under the editor engine section.
+    /// </summary>
+    /// <param name="iniContent">The content of the XComEngine.ini file.</param>
+    /// <returns>An array of script package names.</returns>
     private string[] GetAllScriptPackages(string iniContent)
     {
         var pkgs = new List<string>();
@@ -868,6 +944,11 @@ public class BuildController
         return pkgs.Where(pkg => !_nativeScriptPackages.Contains(pkg, StringComparer.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
+    /// <summary>
+    /// Discovers all script package names by scanning the 'Src' directory of the main mod
+    /// and any included dependency source directories.
+    /// </summary>
+    /// <returns>An array of discovered package names.</returns>
     private string[] GetModScriptPackagesFromSrc()
     {
         var pkgs = new List<string>();
@@ -877,6 +958,12 @@ public class BuildController
         return pkgs.Where(pkg => !_nativeScriptPackages.Contains(pkg, StringComparer.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
+    /// <summary>
+    /// Copies the compiled .u binaries from the SDK script folder to the mod's staging area.
+    /// </summary>
+    /// <param name="modScriptPackages">The list of packages to copy.</param>
+    /// <param name="stagingPath">The target staging path.</param>
+    /// <param name="ct">The cancellation token.</param>
     private async Task CopyScriptPackagesAsync(string[] modScriptPackages, string stagingPath, CancellationToken ct)
     {
         var stagingScriptPath = Path.Combine(stagingPath, "Script");
@@ -888,6 +975,12 @@ public class BuildController
         }
     }
 
+    /// <summary>
+    /// Removes compiled script binaries from the SDK and Game directories to ensure
+    /// a clean environment for subsequent builds and avoid "No scripts need recompiling" issues.
+    /// </summary>
+    /// <param name="modScriptPackages">The list of packages to clean.</param>
+    /// <param name="ct">The cancellation token.</param>
     private async Task CleanLeftoverScriptsAsync(string[] modScriptPackages, CancellationToken ct)
     {
         var pathsToClean = new[] { Path.Combine(_options.SdkPath, "XComGame", "Script"), Path.Combine(_options.SdkPath, "XComGame", "ScriptFinalRelease"), Path.Combine(_options.GamePath, "XComGame", "Script") };
@@ -898,6 +991,9 @@ public class BuildController
         }
     }
 
+    /// <summary>
+    /// Generates the standard .XComMod metadata file in the staging directory.
+    /// </summary>
     private async Task GenerateXComModFileAsync(string stagingPath, CancellationToken ct)
     {
         var xcomModPath = Path.Combine(stagingPath, $"{_options.ModNameCanonical}.XComMod");
@@ -911,6 +1007,10 @@ public class BuildController
         return x2projFiles.Length > 0 ? Path.GetDirectoryName(x2projFiles[0]) ?? root : root;
     }
 
+    /// <summary>
+    /// Synchronizes source code from a project directory to the SDK's Development/Src folder.
+    /// Also handles 'extra_globals.uci' inclusion for macro stability across dependencies.
+    /// </summary>
     private async Task CopySrcFolderAsync(string includeDir, string sdkDevSrcPath, Dictionary<string, (string Path, int Line)> definedMacros, CancellationToken ct)
     {
         if (!Directory.Exists(includeDir)) return;
@@ -935,6 +1035,10 @@ public class BuildController
         }
     }
 
+    /// <summary>
+    /// Parses an UnrealScript include file (.uci) to track macro definitions.
+    /// Used to detect macro redefinitions that could cause compilation instability.
+    /// </summary>
     private void ParseMacroFile(string filePath, Dictionary<string, (string Path, int Line)> definedMacros)
     {
         if (!File.Exists(filePath)) return;

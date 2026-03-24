@@ -13,6 +13,10 @@ namespace XCom2ModCompiler.Cooking;
 /// Asset cooking step - mirrors PowerShell ModAssetsCookStep class.
 /// Handles the complete asset cooking pipeline with incremental support.
 /// </summary>
+/// <summary>
+/// Implements the core asset cooking pipeline for XCOM 2 mods, providing parity with the original PowerShell ModAssetsCookStep.
+/// This class handles incremental cooking, SDK environment preparation, and performance tracking for TFC and SF packages.
+/// </summary>
 public class ModAssetsCookStep
 {
     private readonly BuildOptions _project;
@@ -37,6 +41,16 @@ public class ModAssetsCookStep
     private string _cookerOutputTrackerPath = "";
     private CookerOutputTracker _cookerOutputTracker = new();
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ModAssetsCookStep"/> class.
+    /// </summary>
+    /// <param name="project">The build options for the project.</param>
+    /// <param name="contentOptions">The content-specific configuration for asset processing.</param>
+    /// <param name="stagingPath">The path where finalized assets should be placed.</param>
+    /// <param name="runner">The process runner for commandlet invocation.</param>
+    /// <param name="mirror">The file mirroring service for resource syncing.</param>
+    /// <param name="tracker">The build tracker for change detection.</param>
+    /// <param name="logger">The logger for internal diagnostics.</param>
     public ModAssetsCookStep(
         BuildOptions project,
         ContentOptions contentOptions,
@@ -56,8 +70,10 @@ public class ModAssetsCookStep
     }
 
     /// <summary>
-    /// Executes the complete asset cooking pipeline.
+    /// Executes the complete asset cooking sequence, including environment setup, change detection, and commandlet execution.
     /// </summary>
+    /// <param name="ct">A cancellation token to abort the process.</param>
+    /// <returns>True if the cooking pipeline completed successfully; otherwise false.</returns>
     public async Task<bool> ExecuteAsync(CancellationToken ct)
     {
         if (!AnyAssetsToCook())
@@ -98,6 +114,9 @@ public class ModAssetsCookStep
         return true;
     }
 
+    /// <summary>
+    /// Initializes internal paths, suffixes, and map lists based on project configuration.
+    /// </summary>
     private void Init()
     {
         _actualTfcSuffix = $"_{_project.ModNameCanonical}_DLCTFC_XPACK_";
@@ -106,14 +125,12 @@ public class ModAssetsCookStep
         _sdkContentModsDir = Path.Combine(_project.SdkPath, "XComGame", "Content", "Mods");
         _sdkContentModsOurDir = Path.Combine(_sdkContentModsDir, _project.ModNameCanonical);
 
-        // Build list of maps to cook
         _cookedMaps = new List<string>(_contentOptions.SfMaps);
         foreach (var mapDef in _contentOptions.SfCollectionMaps)
         {
             _cookedMaps.Add(mapDef.Name);
         }
 
-        // Find collection-only maps (maps that don't exist in ContentForCook)
         _sfCollectionOnlyMaps = new List<string>();
         foreach (var mapDef in _contentOptions.SfCollectionMaps)
         {
@@ -126,7 +143,6 @@ public class ModAssetsCookStep
             }
         }
 
-        // Load cooker output tracker
         _cookerOutputTrackerPath = Path.Combine(_project.BuildCachePath, "AssetsCookerOutputTracker.json");
         if (File.Exists(_cookerOutputTrackerPath))
         {
@@ -139,6 +155,10 @@ public class ModAssetsCookStep
         }
     }
 
+    /// <summary>
+    /// Validates that the project source and SDK environment are in a consistent state for cooking.
+    /// </summary>
+    /// <exception cref="BuildFailureException">Thrown if core directories or artifacts are missing.</exception>
     private void VerifyProjectAndSdk()
     {
         if (!Directory.Exists(_contentForCookPath))
@@ -154,7 +174,6 @@ public class ModAssetsCookStep
             }
         }
 
-        // Verify shipped GPCD exists
         var shippedGpcdPath = Path.Combine(_project.SdkPath, "XComGame", "CookedPCConsole", "GlobalPersistentCookerData.upk");
         if (!File.Exists(shippedGpcdPath))
         {
@@ -162,16 +181,17 @@ public class ModAssetsCookStep
         }
     }
 
+    /// <summary>
+    /// Prepares the local build cache by creating temporary collection maps.
+    /// </summary>
     private async Task PrepareProjectCacheAsync()
     {
-        // Prep the folder for collection maps
         if (Directory.Exists(_collectionMapsPath))
         {
             Directory.Delete(_collectionMapsPath, true);
         }
         Directory.CreateDirectory(_collectionMapsPath);
 
-        // Create empty collection maps for collection-only maps
         foreach (var map in _sfCollectionOnlyMaps)
         {
             var destPath = Path.Combine(_collectionMapsPath, $"{map}.umap");
@@ -179,6 +199,10 @@ public class ModAssetsCookStep
         }
     }
 
+    /// <summary>
+    /// Validates that cached TFC files have not been modified externally.
+    /// Triggers a full recook if inconsistencies are detected.
+    /// </summary>
     private void VerifyCachedTfcsNotAltered()
     {
         if (!CheckCachedTfcsNotAltered())
@@ -186,12 +210,15 @@ public class ModAssetsCookStep
             _logger.LogInformation("Performing a full recook");
             CleanModAssetCookerOutput(_project.SdkPath, _project.ModNameCanonical, new[] { _contentForCookPath, _collectionMapsPath });
 
-            // Save that everything is deleted
             _cookerOutputTracker.TfcFiles.Clear();
             RecordCookerOutputTracker();
         }
     }
 
+    /// <summary>
+    /// Checks the structural integrity and timestamps of existing TFC files against tracked metadata.
+    /// </summary>
+    /// <returns>True if all TFC files are consistent with the tracker; otherwise false.</returns>
     private bool CheckCachedTfcsNotAltered()
     {
         var currentTfcs = GetOurTfcFiles().Select(f => f.Name).ToList();
@@ -225,9 +252,11 @@ public class ModAssetsCookStep
         return true;
     }
 
+    /// <summary>
+    /// Synchronizes SF package timestamps and deletes untracked or modified packages to ensure incremental consistency.
+    /// </summary>
     private void VerifyCachedSfPackagesNotAltered()
     {
-        // Delete tracked if timestamp doesn't match
         foreach (var trackedFileData in _cookerOutputTracker.SfPackages)
         {
             var path = Path.Combine(_project.CookerOutputPath, trackedFileData.FullFileName);
@@ -242,7 +271,6 @@ public class ModAssetsCookStep
             }
         }
 
-        // Delete supposed-to-cook if they exist but are not tracked
         foreach (var fileName in GetDesiredOutputPackageFileNames())
         {
             var path = Path.Combine(_project.CookerOutputPath, fileName);
@@ -256,11 +284,13 @@ public class ModAssetsCookStep
         }
     }
 
+    /// <summary>
+    /// Analyzes source content and existing build artifacts to identify which maps require recooking.
+    /// </summary>
     private void DetermineDirtyMaps()
     {
         _dirtyMaps = new List<string>();
 
-        // Check the dev-made maps
         foreach (var map in _cookedMaps)
         {
             if (_sfCollectionOnlyMaps.Contains(map)) continue;
@@ -288,7 +318,6 @@ public class ModAssetsCookStep
             }
         }
 
-        // Check the collection maps
         foreach (var mapDef in _contentOptions.SfCollectionMaps)
         {
             var map = mapDef.Name;
@@ -323,6 +352,9 @@ public class ModAssetsCookStep
         }
     }
 
+    /// <summary>
+    /// Creates a temporary 'injected' version of the SDK's Engine.ini to make mod assets visible to the cooker.
+    /// </summary>
     private void PrepareEngineIni()
     {
         var lines = PrepareEngineIniAdditions();
@@ -331,38 +363,38 @@ public class ModAssetsCookStep
         var localDefaultEngineIniPath = Path.Combine(_project.BuildCachePath, $"{fileNamePrefix}_DefaultEngine.ini");
         var localXComEngineIniPath = Path.Combine(_project.BuildCachePath, $"{fileNamePrefix}_XComEngine.ini");
 
-        // Read SDK Engine.ini and add our additions
         var sdkEngineIniPath = Path.Combine(_project.SdkPath, "XComGame", "Config", "DefaultEngine.ini");
         var sdkEngineIniContent = File.ReadAllText(sdkEngineIniPath);
         var newEngineIniContent = sdkEngineIniContent + "\n" + string.Join("\n", lines) + "\n";
         
         File.WriteAllText(localDefaultEngineIniPath, newEngineIniContent);
-        File.WriteAllText(localXComEngineIniPath, ""); // Empty XComEngine.ini
+        File.WriteAllText(localXComEngineIniPath, ""); 
 
         _engineIniDefaultPath = localDefaultEngineIniPath;
         _engineIniXComPath = localXComEngineIniPath;
     }
 
+    /// <summary>
+    /// Generates the INI section additions required to redirect the cooker to mod source and cache directories.
+    /// </summary>
+    /// <returns>An array of formatted INI lines.</returns>
     private string[] PrepareEngineIniAdditions()
     {
         var lines = new List<string>();
 
-        // "Inject" our assets into the SDK to make them visible to the cooker
         lines.Add("[Core.System]");
         lines.Add($"+Paths={_contentForCookPath}");
-        lines.Add("-Paths=..\\..\\XComGame\\Content\\Mods"); // Do not actually load the packages from there
+        lines.Add("-Paths=..\\..\\XComGame\\Content\\Mods"); 
 
         if (_sfCollectionOnlyMaps.Count > 0)
         {
             lines.Add($"+Paths={_collectionMapsPath}");
         }
 
-        // Stop all the "Adding [...]" garbage
         lines.Add("[Engine.X2DirectoriesToSkipEnumeration]");
         lines.Add(".Directory=..\\..\\XComGame");
         lines.Add(".Directory=..\\..\\Engine");
 
-        // Collection maps
         lines.Add("[Engine.PackagesToForceCookPerMap]");
         foreach (var mapDef in _contentOptions.SfCollectionMaps)
         {
@@ -376,19 +408,19 @@ public class ModAssetsCookStep
         return lines.ToArray();
     }
 
+    /// <summary>
+    /// Ensures necessary SDK and cooker directories exist and are synchronized with base game artifacts.
+    /// </summary>
     private async Task PrepareSdkFoldersAsync(CancellationToken ct)
     {
-        // Ensure cooker output directory exists
         if (!Directory.Exists(_project.CookerOutputPath))
         {
             _logger.LogInformation("Creating {Path} directory...", _project.CookerOutputPath);
             Directory.CreateDirectory(_project.CookerOutputPath);
         }
 
-        // Parity: Copy base game artifacts if missing
         await SyncBaseGameAssetsAsync(ct);
 
-        // Create our Content Mods directory
         if (!Directory.Exists(_sdkContentModsOurDir))
         {
             _logger.LogInformation("Creating {Path} directory...", _sdkContentModsOurDir);
@@ -396,6 +428,9 @@ public class ModAssetsCookStep
         }
     }
 
+    /// <summary>
+    /// Synchronizes core game cooking artifacts (GPCD, GuidCache, Shaders) and base TFC files into the SDK cooker output directory.
+    /// </summary>
     private async Task SyncBaseGameAssetsAsync(CancellationToken ct)
     {
         var gameCookedPath = Path.Combine(_project.GamePath, "XComGame", "CookedPCConsole");
@@ -419,10 +454,12 @@ public class ModAssetsCookStep
         }
 
         _logger.LogInformation("Synchronizing base game Texture File Caches (*.tfc)...");
-        // robocopy /NJH /XC /XN /XO (Parity with PS1)
         await _mirror.MirrorWithArgsAsync(gameCookedPath, _project.CookerOutputPath, "*.tfc", "/NJH /XC /XN /XO", ct);
     }
 
+    /// <summary>
+    /// Constructs the CLI arguments for the asset cooker commandlet.
+    /// </summary>
     private void PrepareEditorArgs()
     {
         var cookerFlags = $"-platform=pcconsole -skipmaps -TFCSUFFIX=_XPACK_ -singlethread -unattended -DLCName={_project.ModNameCanonical}";
@@ -435,11 +472,14 @@ public class ModAssetsCookStep
         _editorArgs = $"CookPackages {mapsString} {cookerFlags} -DEFENGINEINI=\"{_engineIniDefaultPath}\" -ENGINEINI=\"{_engineIniXComPath}\"";
     }
 
+    /// <summary>
+    /// Executes the asset cooking process by invoking the UnrealEd commandlet.
+    /// Includes the 'IteratorGuard' hack and cleanup logic to ensure SDK stability.
+    /// </summary>
     private async Task ExecuteCoreAsync(CancellationToken ct)
     {
         try
         {
-            // Create iterator guard and dummy files for SF standalone packages
             if (_contentOptions.SfStandalone.Count > 0)
             {
                 await CreateMarkerPackageFileAsync("000000000_________IteratorGuard");
@@ -474,12 +514,18 @@ public class ModAssetsCookStep
         }
     }
 
+    /// <summary>
+    /// Creates a dummy package file to satisfy the cooker's iteration requirements.
+    /// </summary>
     private async Task CreateMarkerPackageFileAsync(string packageName)
     {
         var path = Path.Combine(_sdkContentModsOurDir, $"{packageName}.upk");
         await File.WriteAllTextAsync(path, "");
     }
 
+    /// <summary>
+    /// Invokes the UnrealEd.com commandlet with the prepared editor arguments.
+    /// </summary>
     private async Task InvokeAssetCookerAsync(string editorArguments, CancellationToken ct)
     {
         _logger.LogInformation(editorArguments);
@@ -491,6 +537,9 @@ public class ModAssetsCookStep
         await _runner.RunProcessWithSleepAsync(commandletPath, editorArguments, receiver, 0, 0, ct);
     }
 
+    /// <summary>
+    /// Analyzes TFC file growth and logs warnings if significant data duplication is suspected.
+    /// </summary>
     private void WarnTfcGrowth()
     {
         var tfcs = GetOurTfcFiles();
@@ -499,7 +548,7 @@ public class ModAssetsCookStep
         foreach (var file in tfcs)
         {
             var trackedFileData = GetTfcTrackerData(file.Name);
-            if (trackedFileData == null) continue; // New file - ignore
+            if (trackedFileData == null) continue; 
             if (file.Length == trackedFileData.OriginalSize) continue;
 
             var increase = (double)file.Length / trackedFileData.OriginalSize;
@@ -521,9 +570,11 @@ public class ModAssetsCookStep
         }
     }
 
+    /// <summary>
+    /// Persists the current state of build artifacts (TFC and SF packages) to the tracker file for incremental builds.
+    /// </summary>
     private void RecordCookerOutputTracker()
     {
-        // TFCs
         var tfcs = GetOurTfcFiles();
         foreach (var file in tfcs)
         {
@@ -543,7 +594,6 @@ public class ModAssetsCookStep
             }
         }
 
-        // SF packages
         var sfPackageFileNames = GetDesiredOutputPackageFileNames();
         _cookerOutputTracker.SfPackages = _cookerOutputTracker.SfPackages
             .Where(sf => sfPackageFileNames.Contains(sf.FullFileName))
@@ -571,14 +621,15 @@ public class ModAssetsCookStep
             }
         }
 
-        // Write the tracker file
         var json = System.Text.Json.JsonSerializer.Serialize(_cookerOutputTracker, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(_cookerOutputTrackerPath, json);
     }
 
+    /// <summary>
+    /// Copies the finalized build artifacts from the cooker output to the project staging directory.
+    /// </summary>
     private void StageArtifacts()
     {
-        // Prepare the folder for cooked stuff
         var stagingCookedDir = Path.Combine(_stagingPath, "CookedPCConsole");
         
         if (!Directory.Exists(stagingCookedDir))
@@ -586,13 +637,11 @@ public class ModAssetsCookStep
             Directory.CreateDirectory(stagingCookedDir);
         }
 
-        // Copy over the TFC files
         foreach (var tfc in GetOurTfcFiles())
         {
             File.Copy(tfc.FullName, Path.Combine(stagingCookedDir, tfc.Name), true);
         }
 
-        // Copy over the maps
         foreach (var umap in _cookedMaps)
         {
             var src = Path.Combine(_project.CookerOutputPath, $"{umap}.upk");
@@ -602,7 +651,6 @@ public class ModAssetsCookStep
             }
         }
 
-        // Copy over the SF packages
         foreach (var package in _contentOptions.SfStandalone)
         {
             var src = Path.Combine(_project.CookerOutputPath, $"{package}_SF.upk");
@@ -614,6 +662,10 @@ public class ModAssetsCookStep
         }
     }
 
+    /// <summary>
+    /// Retrieves all TFC files generated for the current mod project in the SDK cooker output directory.
+    /// </summary>
+    /// <returns>An array of <see cref="FileInfo"/> objects for the mod's TFC files.</returns>
     private FileInfo[] GetOurTfcFiles()
     {
         return Directory.GetFiles(_project.CookerOutputPath, $"*{_actualTfcSuffix}.tfc")
@@ -621,6 +673,10 @@ public class ModAssetsCookStep
             .ToArray();
     }
 
+    /// <summary>
+    /// Generates the list of filenames for all expected output packages (SF and Maps).
+    /// </summary>
+    /// <returns>An array of expected package filenames.</returns>
     private string[] GetDesiredOutputPackageFileNames()
     {
         var sfPackageFileNames = _contentOptions.SfStandalone.Select(p => $"{p}_SF.upk").OfType<string>().ToList();
@@ -628,16 +684,25 @@ public class ModAssetsCookStep
         return sfPackageFileNames.ToArray();
     }
 
+    /// <summary>
+    /// Retrieves tracking metadata for a specific TFC file.
+    /// </summary>
     private TfcFileData? GetTfcTrackerData(string fullFileName)
     {
         return _cookerOutputTracker.TfcFiles.FirstOrDefault(f => f.FullFileName == fullFileName);
     }
 
+    /// <summary>
+    /// Retrieves tracking metadata for a specific SF package.
+    /// </summary>
     private SfPackageData? GetSfPackageTrackerData(string fullFileName)
     {
         return _cookerOutputTracker.SfPackages.FirstOrDefault(f => f.FullFileName == fullFileName);
     }
 
+    /// <summary>
+    /// Checks if any asset cooking is requested based on Content options.
+    /// </summary>
     private bool AnyAssetsToCook()
     {
         return _contentOptions.SfStandalone.Count > 0 || 
@@ -645,6 +710,9 @@ public class ModAssetsCookStep
                _contentOptions.SfCollectionMaps.Count > 0;
     }
 
+    /// <summary>
+    /// Extracts an embedded map resource to a target path.
+    /// </summary>
     private async Task ExtractEmptyUMapAsync(string destinationPath)
     {
         var assembly = typeof(ModAssetsCookStep).Assembly;
@@ -660,9 +728,11 @@ public class ModAssetsCookStep
         await stream.CopyToAsync(fileStream);
     }
 
+    /// <summary>
+    /// Removes mod-specific build artifacts from the SDK installation.
+    /// </summary>
     private void CleanModAssetCookerOutput(string sdkPath, string modNameCanonical, string[] excludePaths)
     {
-        // Delete TFC files
         var tfcSuffix = $"_{modNameCanonical}_DLCTFC_XPACK_";
         var tfcFiles = Directory.GetFiles(Path.Combine(sdkPath, "XComGame", "Published", "CookedPCConsole"), $"*{tfcSuffix}.tfc");
         foreach (var tfc in tfcFiles)
@@ -670,7 +740,6 @@ public class ModAssetsCookStep
             File.Delete(tfc);
         }
 
-        // Delete SF packages
         var sfPackages = _contentOptions.SfStandalone.Select(p => $"{p}_SF.upk").Concat(_cookedMaps.Select(m => $"{m}.upk"));
         foreach (var pkg in sfPackages)
         {
