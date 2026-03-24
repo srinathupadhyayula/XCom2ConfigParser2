@@ -2,15 +2,15 @@ using System.Diagnostics;
 
 namespace XCom2ModCompiler.Utilities;
 
-public interface IFileMirror
+public interface IFileMirrorParity
 {
-    Task MirrorAsync(string source, string destination, string pattern = "*.*", string[]? excludeFiles = null, string[]? excludeDirs = null, CancellationToken ct = default);
-    Task MirrorWithArgsAsync(string source, string destination, string pattern = "*.*", string args = "/MIR /R:3 /W:5 /NFL /NDL /NJH /NJS /nc /ns /np", CancellationToken ct = default);
-    Task CopyAsync(string source, string destination, bool overwrite = true, CancellationToken ct = default);
-    Task DeleteAsync(string path, bool recursive = true, CancellationToken ct = default);
+    Task MirrorAsync(string source, string destination, string pattern = "*.*", string[]? excludeFiles = null, string[]? excludeDirs = null, CancellationToken ct = default(CancellationToken));
+    Task MirrorWithArgsAsync(string source, string destination, string pattern = "*.*", string args = "/MIR /R:3 /W:5 /NFL /NDL /NJH /NJS /nc /ns /np", CancellationToken ct = default(CancellationToken));
+    Task CopyAsync(string source, string destination, bool overwrite = true, CancellationToken ct = default(CancellationToken));
+    Task DeleteAsync(string path, bool recursive = true, CancellationToken ct = default(CancellationToken));
 }
 
-public class RobocopyFileMirror : IFileMirror
+public class RobocopyFileMirror : IFileMirrorParity
 {
     private readonly IProcessRunner _processRunner;
 
@@ -19,7 +19,7 @@ public class RobocopyFileMirror : IFileMirror
         _processRunner = processRunner;
     }
 
-    public async Task MirrorAsync(string source, string destination, string pattern = "*.*", string[]? excludeFiles = null, string[]? excludeDirs = null, CancellationToken ct = default)
+    public async Task MirrorAsync(string source, string destination, string pattern, string[]? excludeFiles, string[]? excludeDirs, CancellationToken ct)
     {
         if (!Directory.Exists(source)) return;
 
@@ -38,7 +38,7 @@ public class RobocopyFileMirror : IFileMirror
         await RunRobocopyAsync(args, source, destination, ct);
     }
 
-    public async Task MirrorWithArgsAsync(string source, string destination, string pattern = "*.*", string args = "/MIR /R:3 /W:5 /NFL /NDL /NJH /NJS /nc /ns /np", CancellationToken ct = default)
+    public async Task MirrorWithArgsAsync(string source, string destination, string pattern, string args, CancellationToken ct)
     {
         if (!Directory.Exists(source)) return;
 
@@ -58,7 +58,7 @@ public class RobocopyFileMirror : IFileMirror
         }
     }
 
-    public Task CopyAsync(string source, string destination, bool overwrite = true, CancellationToken ct = default)
+    public Task CopyAsync(string source, string destination, bool overwrite, CancellationToken ct)
     {
         if (File.Exists(source))
         {
@@ -72,7 +72,7 @@ public class RobocopyFileMirror : IFileMirror
         return Task.CompletedTask;
     }
 
-    public Task DeleteAsync(string path, bool recursive = true, CancellationToken ct = default)
+    public Task DeleteAsync(string path, bool recursive, CancellationToken ct)
     {
         if (Directory.Exists(path))
         {
