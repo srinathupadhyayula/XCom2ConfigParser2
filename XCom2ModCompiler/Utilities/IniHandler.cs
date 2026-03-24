@@ -20,44 +20,37 @@ public class IniHandler
         _iniRoots = iniRoots;
     }
 
-    /// <summary>
-    /// Discovers the single XComEngine.ini that contains the compiler sections.
-    /// Throws BuildConfigurationException if multiple files contain these sections.
-    /// </summary>
-    public string FindTargetIni()
+    public string? FindTargetIni()
     {
-        if (_targetFile != null) return _targetFile;
+        if (!string.IsNullOrEmpty(_targetFile)) return _targetFile;
 
         var candidates = new List<string>();
-        var targetSections = new[] { "[Engine.ScriptPackages]", "[UnrealEd.EditorEngine]", "[X2Compiler.DependantPackages]" };
-
         foreach (var root in _iniRoots)
         {
             if (!Directory.Exists(root)) continue;
-
             var files = Directory.GetFiles(root, "XComEngine.ini", SearchOption.AllDirectories);
-            foreach (var file in files)
-            {
-                if (FileContainsAnySection(file, targetSections))
-                {
-                    candidates.Add(file);
-                }
-            }
+            candidates.AddRange(files);
         }
 
-        if (candidates.Count == 0)
+        if (candidates.Count == 0) return null;
+        if (candidates.Count == 1)
         {
-            return "";
+            _targetFile = candidates[0];
+            return _targetFile;
         }
 
-        if (candidates.Count > 1)
+        var targetSections = new[] { "[X2ModCompiler.DependantPackages]", "[UnrealEd.EditorEngine]" };
+        var priorityFiles = candidates.Where(f => FileContainsAnySection(f, targetSections)).ToList();
+        
+        if (priorityFiles.Count == 1)
         {
-            var message = "Multiple XComEngine.ini files contain compiler sections. Please consolidate them into a single file:\n" +
-                          string.Join("\n", candidates);
-            throw new BuildConfigurationException("XComEngine.ini", message);
+            _targetFile = priorityFiles[0];
+        }
+        else
+        {
+            _targetFile = candidates.OrderBy(f => f.Contains("0Base") ? 1 : 0).First();
         }
 
-        _targetFile = candidates[0];
         return _targetFile;
     }
 
@@ -77,128 +70,193 @@ public class IniHandler
         return false;
     }
 
-    /// <summary>
-    /// Prepares the INI content for staging. 
-    /// Ensures the main mod is included in ModEditPackages and (optionally) adds dependent packages.
-    /// </summary>
     public string PrepareStagedIni(string originalContent, string mainModName, List<string>? dependantPackages = null)
     {
         var lines = originalContent.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None).ToList();
-        
-        // 1. Remove the [X2Compiler.DependantPackages] section entirely from staged version
-        int depStartIndex = -1;
-        int depEndIndex = -1;
+        RemoveSection(lines, "[X2ModCompiler.DependantPackages]");
+        EnsurePackagesInEngineSection(lines, mainModName, dependantPackages);
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    /// <summary>
+    /// Prepares the INI for mod compilation.
+    /// This is used for BOTH passes in the two-pass system to ensure environment stability.
+    /// </summary>
+    public string PrepareModCompilationIni(string originalContent, string mainModName, List<string> dependantPackages)
+    {
+        var lines = originalContent.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None).ToList();
+        RemoveSection(lines, "[X2ModCompiler.DependantPackages]");
+        EnsurePackagesInEngineSection(lines, mainModName, dependantPackages);
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    public string PreparePass1Ini(string originalContent, string mainModName, List<string> dependantPackages)
+    {
+        return PrepareModCompilationIni(originalContent, mainModName, dependantPackages);
+    }
+
+    public string PreparePass2Ini(string originalContent, string mainModName, List<string> dependantPackages)
+    {
+        return PrepareModCompilationIni(originalContent, mainModName, dependantPackages);
+    }
+
+    private void RemoveSection(List<string> lines, string sectionHeader)
+    {
+        int sectionStartIndex = -1;
+        int sectionEndIndex = -1;
         for (int i = 0; i < lines.Count; i++)
         {
             var trimmed = lines[i].Trim();
-            if (string.Equals(trimmed, "[X2Compiler.DependantPackages]", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(trimmed, sectionHeader, StringComparison.OrdinalIgnoreCase))
             {
-                depStartIndex = i;
+                sectionStartIndex = i;
                 continue;
             }
 
-            if (depStartIndex != -1 && trimmed.StartsWith("["))
+            if (sectionStartIndex != -1 && trimmed.StartsWith("["))
             {
-                depEndIndex = i;
+                sectionEndIndex = i;
                 break;
             }
         }
-        if (depStartIndex != -1)
+        if (sectionStartIndex != -1)
         {
-            if (depEndIndex == -1) depEndIndex = lines.Count;
-            lines.RemoveRange(depStartIndex, depEndIndex - depStartIndex);
+            if (sectionEndIndex == -1) sectionEndIndex = lines.Count;
+            lines.RemoveRange(sectionStartIndex, sectionEndIndex - sectionStartIndex);
         }
+    }
 
-        // 2. Ensure [UnrealEd.EditorEngine] exists and contains the mod packages
-        int engineSectionIndex = -1;
-        for (int i = 0; i < lines.Count; i++)
-        {
-            if (string.Equals(lines[i].Trim(), "[UnrealEd.EditorEngine]", StringComparison.OrdinalIgnoreCase))
-            {
-                engineSectionIndex = i;
-                break;
-            }
-        }
-
+    private void EnsurePackagesInEngineSection(List<string> lines, string mainModName, List<string>? dependantPackages = null)
+    {
+        int engineSectionIndex = FindLastSection(lines, "[UnrealEd.EditorEngine]");
         if (engineSectionIndex == -1)
         {
-            // Section missing? Add it at the end
             lines.Add("");
             lines.Add("[UnrealEd.EditorEngine]");
             engineSectionIndex = lines.Count - 1;
         }
 
-        // Remove any existing mainMod entry to ensure we can place it at the absolute end
-        for (int i = engineSectionIndex + 1; i < lines.Count; i++)
+        // 1. Find stable position of main mod
+        int mainModIndex = FindPackageInSection(lines, engineSectionIndex, mainModName);
+        
+        // 2. Remove dependants to re-seat them after main mod
+        if (dependantPackages != null)
+        {
+            RemovePackagesFromSection(lines, engineSectionIndex, dependantPackages);
+            // Re-find mainModIndex in case it moved
+            mainModIndex = FindPackageInSection(lines, engineSectionIndex, mainModName);
+        }
+
+        // 3. Insert/Move main mod if needed
+        if (mainModIndex == -1)
+        {
+            int insertPoint = FindSectionEnd(lines, engineSectionIndex);
+            lines.Insert(insertPoint, $"+ModEditPackages={mainModName}");
+            mainModIndex = insertPoint;
+        }
+
+        // 4. Append dependants after main mod
+        if (dependantPackages != null && dependantPackages.Count > 0)
+        {
+             int insertPoint = mainModIndex + 1;
+             foreach(var dep in dependantPackages)
+             {
+                 lines.Insert(insertPoint, $"+ModEditPackages={dep}");
+                 insertPoint++;
+             }
+        }
+    }
+
+    private int FindLastSection(List<string> lines, string sectionHeader)
+    {
+        for (int i = lines.Count - 1; i >= 0; i--)
+        {
+            var trimmed = lines[i].Trim();
+            if (trimmed.Contains(";")) trimmed = trimmed.Split(';')[0].Trim();
+            if (trimmed.Contains("#")) trimmed = trimmed.Split('#')[0].Trim();
+
+            if (string.Equals(trimmed, sectionHeader, StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private int FindSectionEnd(List<string> lines, int sectionStartIndex)
+    {
+        for (int i = sectionStartIndex + 1; i < lines.Count; i++)
+        {
+            var trimmed = lines[i].Trim();
+            if (trimmed.StartsWith("[")) return i;
+        }
+        return lines.Count;
+    }
+
+    private int FindPackageInSection(List<string> lines, int sectionStartIndex, string packageName)
+    {
+        for (int i = sectionStartIndex + 1; i < lines.Count; i++)
         {
             var trimmed = lines[i].Trim();
             if (trimmed.StartsWith("[")) break;
-            if (trimmed.Contains($"={mainModName}", StringComparison.OrdinalIgnoreCase))
+
+            if (trimmed.Contains($"={packageName}", StringComparison.OrdinalIgnoreCase))
             {
-                lines.RemoveAt(i);
-                i--; 
+                var index = trimmed.IndexOf($"={packageName}", StringComparison.OrdinalIgnoreCase);
+                var entryValue = trimmed.Substring(index + 1).Trim();
+                if (entryValue.Contains(";")) entryValue = entryValue.Split(';')[0].Trim();
+                if (entryValue.Contains("#")) entryValue = entryValue.Split('#')[0].Trim();
+
+                if (string.Equals(entryValue, packageName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return i;
+                }
             }
         }
+        return -1;
+    }
 
-        // If we have dependant packages to add, remove them too (to avoid duplicates)
-        if (dependantPackages != null)
+    private void RemovePackagesFromSection(List<string> lines, int sectionStartIndex, List<string> packagesToRemove)
+    {
+        for (int i = sectionStartIndex + 1; i < lines.Count; i++)
         {
-            foreach (var dep in dependantPackages)
+            var trimmed = lines[i].Trim();
+            if (trimmed.StartsWith("[")) break;
+
+            foreach (var pkg in packagesToRemove)
             {
-                for (int i = engineSectionIndex + 1; i < lines.Count; i++)
+                if (trimmed.Contains($"={pkg}", StringComparison.OrdinalIgnoreCase))
                 {
-                    var trimmed = lines[i].Trim();
-                    if (trimmed.StartsWith("[")) break;
-                    if (trimmed.Contains($"={dep}", StringComparison.OrdinalIgnoreCase))
+                    var index = trimmed.IndexOf($"={pkg}", StringComparison.OrdinalIgnoreCase);
+                    var entryValue = trimmed.Substring(index + 1).Trim();
+                    if (entryValue.Contains(";")) entryValue = entryValue.Split(';')[0].Trim();
+                    if (entryValue.Contains("#")) entryValue = entryValue.Split('#')[0].Trim();
+
+                    if (string.Equals(entryValue, pkg, StringComparison.OrdinalIgnoreCase))
                     {
                         lines.RemoveAt(i);
                         i--;
+                        break;
                     }
                 }
             }
         }
-
-        // Find insertion point (end of section)
-        int insertAt = -1;
-        for (int i = engineSectionIndex + 1; i < lines.Count; i++)
-        {
-            var trimmed = lines[i].Trim();
-            if (trimmed.StartsWith("["))
-            {
-                insertAt = i;
-                break;
-            }
-        }
-        if (insertAt == -1) insertAt = lines.Count;
-
-        var toAdd = new List<string>();
-        // 1. Dependent packages (if any)
-        if (dependantPackages != null)
-        {
-            foreach (var dep in dependantPackages)
-            {
-                toAdd.Add($"+ModEditPackages={dep}");
-            }
-        }
-        // 2. Main mod is ALWAYS included and ALWAYS last
-        toAdd.Add($"+ModEditPackages={mainModName}");
-
-        lines.InsertRange(insertAt, toAdd);
-
-        return string.Join(Environment.NewLine, lines);
     }
 
-    /// <summary>
-    /// Checks if the two-pass strategy is needed (i.e. if DependantPackages section exists and has entries).
-    /// </summary>
-    public bool IsTwoPassNeeded(string content)
+    private void AppendPackagesToLastEngineSection(List<string> lines, List<string> packages)
     {
-        return GetDependantPackages(content).Any();
+        int lastEngineSectionIndex = FindLastSection(lines, "[UnrealEd.EditorEngine]");
+        if (lastEngineSectionIndex == -1) return;
+
+        int insertAt = FindSectionEnd(lines, lastEngineSectionIndex);
+
+        foreach (var pkg in packages)
+        {
+            lines.Insert(insertAt, $"+ModEditPackages={pkg}");
+            insertAt++;
+        }
     }
 
-    /// <summary>
-    /// Gets the list of package names from the [X2Compiler.DependantPackages] section.
-    /// </summary>
     public List<string> GetDependantPackages(string content)
     {
         var packages = new List<string>();
@@ -207,7 +265,9 @@ public class IniHandler
         foreach (var line in lines)
         {
             var trimmed = line.Trim();
-            if (string.Equals(trimmed, "[X2Compiler.DependantPackages]", StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith(";") || trimmed.StartsWith("#")) continue;
+            
+            if (trimmed.StartsWith("[X2ModCompiler.DependantPackages]", StringComparison.OrdinalIgnoreCase))
             {
                 inSection = true;
                 continue;
@@ -218,13 +278,12 @@ public class IniHandler
                 if (trimmed.StartsWith("+", StringComparison.OrdinalIgnoreCase) && trimmed.Contains("="))
                 {
                     var package = trimmed.Split('=')[1].Trim();
-                    if (!string.IsNullOrEmpty(package))
-                    {
-                        packages.Add(package);
-                    }
+                    if (!string.IsNullOrEmpty(package)) packages.Add(package);
                 }
             }
         }
         return packages;
     }
+
+    public bool IsTwoPassNeeded(string content) => GetDependantPackages(content).Any();
 }

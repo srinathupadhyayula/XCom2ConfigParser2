@@ -32,20 +32,24 @@ public class ScriptCompiler
         OutputReceiver receiver,
         CancellationToken ct)
     {
+        _logger.LogInformation("Compiling base packages...");
+        
+        // Pass 1: Final release build (if enabled)
+        // build_common.ps1 parity: _RunMakeBase() does final_release pass first, then normal pass
         if (options.FinalRelease)
         {
-            _logger.LogInformation("Compiling base packages (baseline)...");
-            // Pass 1: Baseline (Normal build)
-            // build_common.ps1 parity: Final release needs a normal baseline first
-            var baselineArgs = "make -nopause -unattended";
-            if (options.Debug) baselineArgs += " -debug";
-            
-            var success = await InvokeCommandlet(baselineArgs, receiver, "Base Compilation (Baseline)", ct);
+            _logger.LogInformation("Compiling base packages (final_release)...");
+            var finalReleaseArgs = "make -nopause -unattended -final_release";
+            if (options.Debug) finalReleaseArgs += " -debug";
+
+            var success = await InvokeCommandlet(finalReleaseArgs, receiver, "Base Compilation (Final Release)", ct);
             if (!success) return false;
         }
 
-        _logger.LogInformation("Compiling base packages...");
-        var args = BuildArguments(options);
+        // Pass 2: Normal build (always done, and required after final_release)
+        // build_common.ps1 parity: "If we build in final release, we must build the normal scripts too"
+        var args = "make -nopause -unattended";
+        if (options.Debug) args += " -debug";
         return await InvokeCommandlet(args, receiver, "Base Compilation", ct);
     }
 
@@ -66,6 +70,7 @@ public class ScriptCompiler
         // Include mod argument for compiling a specific mod
         // Format: -mods <ModName> <StagingPath>
         args += $" -mods {modName} \"{stagingPath}\"";
+        
         return await InvokeCommandlet(args, receiver, $"Mod Compilation ({modName})", ct);
     }
 
@@ -85,7 +90,7 @@ public class ScriptCompiler
     private async Task<bool> InvokeCommandlet(string args, OutputReceiver receiver, string description, CancellationToken ct)
     {
         receiver.ProcessDescription = description;
-        int exitCode = await _runner.RunProcessWithSleepAsync(_commandletPath, args, receiver, sleepAtStartMs: 1000, sleepAtEndMs: 2000, ct: ct);
+        int exitCode = await _runner.RunProcessWithSleepAsync(_commandletPath, args, receiver, sleepAtStartMs: 1000, sleepAtEndMs: 5000, ct: ct);
 
         return exitCode == 0;
     }

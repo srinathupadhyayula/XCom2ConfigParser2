@@ -25,7 +25,7 @@ public class BuildControllerSelectiveCleanTests : IDisposable
     private readonly Mock<BuildTracker> _trackerMock;
     private readonly Mock<ScriptCompiler> _compilerMock;
     private readonly Mock<AssetCooker> _cookerMock;
-    private readonly Mock<IFileMirror> _mirrorMock;
+    private readonly Mock<IFileMirrorParity> _mirrorMock;
     private readonly Mock<IProcessRunner> _processRunnerMock;
     private readonly Mock<ShaderPrecompiler> _shaderPrecompilerMock;
     private readonly Mock<MissingUncookedCopier> _missingUncookedCopierMock;
@@ -48,7 +48,7 @@ public class BuildControllerSelectiveCleanTests : IDisposable
         var cookerLoggerMock = new Mock<ILogger<AssetCooker>>();
         var loggerFactoryMock = new Mock<ILoggerFactory>();
         loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>())).Returns(new Mock<ILogger<ModAssetsCookStep>>().Object);
-        _mirrorMock = new Mock<IFileMirror>();
+        _mirrorMock = new Mock<IFileMirrorParity>();
         _cookerMock = new Mock<AssetCooker>("", "", "", _processRunnerMock.Object, _mirrorMock.Object, _trackerMock.Object, loggerFactoryMock.Object, cookerLoggerMock.Object);
 
         var shaderPrecompilerLoggerMock = new Mock<ILogger<ShaderPrecompiler>>();

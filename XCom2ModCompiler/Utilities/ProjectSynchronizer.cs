@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Xml.Linq;
 using Microsoft.Extensions.Logging;
+using Kokuban;
 
 namespace XCom2ModCompiler.Utilities;
 
@@ -20,7 +21,7 @@ public class ProjectSynchronizer
     {
         if (!File.Exists(x2projPath))
         {
-            Console.WriteLine($"Project file {x2projPath} not found. Skipping synchronization.");
+            Console.WriteLine(Chalk.Gray[$"Project file {x2projPath} not found. Skipping synchronization."]);
             return;
         }
 
@@ -31,7 +32,7 @@ public class ProjectSynchronizer
         XNamespace ns = doc.Root!.GetDefaultNamespace();
 
         // Remove all existing ItemGroups that contain Folder, Content, or None
-        _logger.LogInformation("Clearing old ItemGroups...");
+        Console.WriteLine($"{Chalk.Cyan["Clearing"]} old ItemGroups...");
         var itemGroupsToRemove = doc.Descendants(ns + "ItemGroup")
             .Where(ig => ig.Elements(ns + "Folder").Any() ||
                          ig.Elements(ns + "Content").Any() ||
@@ -47,14 +48,16 @@ public class ProjectSynchronizer
                     var includeValue = element.Attribute("Include")?.Value;
                     if (includeValue != null)
                     {
-                        _logger.LogInformation($"Removed {element.Name.LocalName} '{includeValue}' from ItemGroups");
+                        var elementType = element.Name.LocalName;
+                        var color = elementType == "Folder" ? Chalk.Magenta : Chalk.White;
+                        Console.WriteLine($"{Chalk.Yellow["Removed"]} {color[elementType]} {Chalk.Gray["'"]}{Chalk.White[includeValue]}{Chalk.Gray["'"]} from ItemGroups");
                     }
                 }
             }
             ig.Remove();
         }
 
-        _logger.LogInformation("Scanning project directory for files and folders...");
+        Console.WriteLine($"{Chalk.Cyan["Scanning"]} project directory for files and folders...");
 
         // Gather all files recursively
         var allFilesList = new List<string>();
@@ -70,7 +73,7 @@ public class ProjectSynchronizer
                 allFilesList.Add(relativePath);
             }
         }
-        
+
         var allFiles = allFilesList.ToArray();
 
         // Gather all unique folders
@@ -87,7 +90,7 @@ public class ProjectSynchronizer
 
         var fileCount = allFiles.Length;
         var folderCount = folders.Count;
-        _logger.LogInformation($"Found {fileCount} files and {folderCount} folders.");
+        Console.WriteLine($"{Chalk.Cyan["Found"]} {Chalk.White[fileCount.ToString()]} files and {Chalk.White[folderCount.ToString()]} folders.");
 
         var newItemGroup = new XElement(ns + "ItemGroup");
 
@@ -103,7 +106,7 @@ public class ProjectSynchronizer
             newItemGroup.Add(new XElement(ns + "Content", new XAttribute("Include", file)));
         }
 
-        _logger.LogInformation("Updating ItemGroup with folders and files...");
+        Console.WriteLine($"{Chalk.Cyan["Updating"]} ItemGroup with folders and files...");
 
         // Sort nodes first by Name ascending (Folder before Content), then by Include ascending
         var sortedNodes = newItemGroup.Nodes().OfType<XElement>()
@@ -114,12 +117,14 @@ public class ProjectSynchronizer
         foreach (var node in sortedNodes)
         {
             var includeValue = node.Attribute("Include")?.Value;
-            _logger.LogInformation($"Added {node.Name.LocalName} '{includeValue}' to ItemGroups");
+            var elementType = node.Name.LocalName;
+            var color = elementType == "Folder" ? Chalk.Magenta : Chalk.White;
+            Console.WriteLine($"{Chalk.Blue["Added"]} {color[elementType]} {Chalk.Gray["'"]}{Chalk.White[includeValue]}{Chalk.Gray["'"]} to ItemGroups");
         }
 
         doc.Root.Add(newItemGroup);
         doc.Save(x2projPath);
 
-        _logger.LogInformation($"ItemGroup regeneration completed successfully for project '{Path.GetFileNameWithoutExtension(x2projPath)}'.");
+        Console.WriteLine($"{Chalk.Green["ItemGroup regeneration completed successfully"]} for project {Chalk.Cyan[Path.GetFileNameWithoutExtension(x2projPath)]}.");
     }
 }

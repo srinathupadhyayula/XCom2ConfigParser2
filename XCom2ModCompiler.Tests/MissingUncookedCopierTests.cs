@@ -12,7 +12,7 @@ namespace XCom2ModCompiler.Tests;
 
 public class MissingUncookedCopierTests
 {
-    private readonly Mock<IFileMirror> _mirrorMock;
+    private readonly Mock<IFileMirrorParity> _mirrorMock;
     private readonly Mock<ILogger<MissingUncookedCopier>> _loggerMock;
     private readonly MissingUncookedCopier _copier;
     private readonly BuildOptions _options;
@@ -20,7 +20,7 @@ public class MissingUncookedCopierTests
 
     public MissingUncookedCopierTests()
     {
-        _mirrorMock = new Mock<IFileMirror>();
+        _mirrorMock = new Mock<IFileMirrorParity>();
         _loggerMock = new Mock<ILogger<MissingUncookedCopier>>();
         _copier = new MissingUncookedCopier(_mirrorMock.Object, _loggerMock.Object);
         

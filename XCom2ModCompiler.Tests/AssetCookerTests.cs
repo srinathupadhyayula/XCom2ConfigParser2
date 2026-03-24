@@ -17,7 +17,7 @@ namespace XCom2ModCompiler.Tests;
 public class AssetCookerTests : IDisposable
 {
     private readonly Mock<IProcessRunner> _processRunnerMock;
-    private readonly Mock<IFileMirror> _fileMirrorMock;
+    private readonly Mock<IFileMirrorParity> _fileMirrorMock;
     private readonly Mock<BuildTracker> _trackerMock;
     private readonly Mock<ILogger<AssetCooker>> _loggerMock;
     private readonly AssetCooker _cooker;
@@ -29,7 +29,7 @@ public class AssetCookerTests : IDisposable
         Directory.CreateDirectory(_tempPath);
 
         _processRunnerMock = new Mock<IProcessRunner>();
-        _fileMirrorMock = new Mock<IFileMirror>();
+        _fileMirrorMock = new Mock<IFileMirrorParity>();
         _trackerMock = new Mock<BuildTracker>(_tempPath, new Mock<ILogger<BuildTracker>>().Object);
         _loggerMock = new Mock<ILogger<AssetCooker>>();
         var loggerFactoryMock = new Mock<ILoggerFactory>();

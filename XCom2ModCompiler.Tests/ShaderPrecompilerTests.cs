@@ -14,7 +14,7 @@ namespace XCom2ModCompiler.Tests;
 public class ShaderPrecompilerTests
 {
     private readonly Mock<IProcessRunner> _processRunnerMock;
-    private readonly Mock<IFileMirror> _fileMirrorMock;
+    private readonly Mock<IFileMirrorParity> _fileMirrorMock;
     private readonly Mock<ILogger<ShaderPrecompiler>> _loggerMock;
     private readonly ShaderPrecompiler _precompiler;
     private readonly BuildOptions _options;
@@ -22,7 +22,7 @@ public class ShaderPrecompilerTests
     public ShaderPrecompilerTests()
     {
         _processRunnerMock = new Mock<IProcessRunner>();
-        _fileMirrorMock = new Mock<IFileMirror>();
+        _fileMirrorMock = new Mock<IFileMirrorParity>();
         _loggerMock = new Mock<ILogger<ShaderPrecompiler>>();
         
         _options = new BuildOptions
