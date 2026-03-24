@@ -152,6 +152,69 @@ public class VariableTypeResolverTests : IDisposable
         result.BaseType.ShouldBe("SDLReplacement");
     }
 
+    [Fact]
+    public void VariableTypeResolver_Resolve_ObjectClassFormat_ReturnsVariableType()
+    {
+        // Class is in some package
+        CreateClassFile("XComGame", "X2CharacterTemplate", """
+            class X2CharacterTemplate extends Object;
+            var config array<name> SupportedFollowers;
+            """);
+
+        var settings = new global::XCom2ConfigParser2.Configuration.ParserSettings { LocalSrcRoot = _srcDir };
+        var resolver = new VariableTypeResolver(settings);
+
+        // Section uses Object Class format: [Specialist X2CharacterTemplate]
+        var result = resolver.Resolve("Specialist X2CharacterTemplate", "SupportedFollowers");
+
+        result.Found.ShouldBeTrue("Should find class globally when space-separated");
+        result.BaseType.ShouldBe("name");
+    }
+
+    [Fact]
+    public void VariableTypeResolver_Resolve_ClassNameOnlyFormat_ReturnsVariableType()
+    {
+        // Class is in some package
+        CreateClassFile("MyMod", "MyCustomClass", """
+            class MyCustomClass extends Object;
+            var config int MyValue;
+            """);
+
+        var settings = new global::XCom2ConfigParser2.Configuration.ParserSettings { LocalSrcRoot = _srcDir };
+        var resolver = new VariableTypeResolver(settings);
+
+        // Section uses just Class format: [MyCustomClass]
+        var result = resolver.Resolve("MyCustomClass", "MyValue");
+
+        result.Found.ShouldBeTrue("Should find class globally when no separator is used");
+        result.BaseType.ShouldBe("int");
+    }
+
+    [Fact]
+    public void VariableTypeResolver_Resolve_InheritedVariable_ReturnsVariableType()
+    {
+        // Parent class in XComGame
+        CreateClassFile("XComGame", "X2ItemTemplate", """
+            class X2ItemTemplate extends Object;
+            var config StrategyCost Cost;
+            """);
+
+        // Child class in same or different package
+        CreateClassFile("XComGame", "X2EquipmentTemplate", """
+            class X2EquipmentTemplate extends X2ItemTemplate;
+            var config int Weight;
+            """);
+
+        var settings = new global::XCom2ConfigParser2.Configuration.ParserSettings { LocalSrcRoot = _srcDir };
+        var resolver = new VariableTypeResolver(settings);
+
+        // Resolve inherited variable 'Cost' in 'X2EquipmentTemplate' context
+        var result = resolver.Resolve("XComGame.X2EquipmentTemplate", "Cost");
+
+        result.Found.ShouldBeTrue("Should find inherited variable in parent class");
+        result.BaseType.ShouldBe("StrategyCost");
+    }
+
     private void CreateClassFile(string packageName, string className, string content)
     {
         var packageDir = Path.Combine(_srcDir, packageName, "Classes");

@@ -60,9 +60,9 @@ public static class UnrealScriptParser
         @"(?:" +
             @"array\s*<\s*(\w+)\s*>" +         // Capture group 1: array<InnerType>
             @"|" +
-            @"(\w+)\s*(?:\[\s*\])?" +          // Capture group 2: Type or Type[]
+            @"(\w+(?:\s*\[\s*\])?)" +          // Capture group 2: Type or Type[]
         @")" +
-        @"\s+(\w+)\s*(?:\[\s*\])?\s*;",        // Capture group 3: variable name
+        @"\s+([^;]+)\s*;",                     // Capture group 3: variable name list (everything up to ;)
         RegexOptions.IgnoreCase);
 
     // -------------------------------------------------------------------------
@@ -93,9 +93,9 @@ public static class UnrealScriptParser
         @"(?:" +
             @"array\s*<\s*(\w+)\s*>" +         // Capture group 1: array<InnerType>
             @"|" +
-            @"(\w+)\s*(?:\[\s*\])?" +          // Capture group 2: Type or Type[]
+            @"(\w+(?:\s*\[\s*\])?)" +          // Capture group 2: Type or Type[]
         @")" +
-        @"\s+(\w+)\s*(?:\[\s*\])?\s*;",        // Capture group 3: field name
+        @"\s+([^;]+)\s*;",                     // Capture group 3: field name list
         RegexOptions.IgnoreCase);
 
     // Matches the start of the first function definition (signals end of var block)
@@ -104,8 +104,34 @@ public static class UnrealScriptParser
         RegexOptions.IgnoreCase);
 
     // -------------------------------------------------------------------------
+    // Regex: Class header (name and extends)
+    // -------------------------------------------------------------------------
+    private static readonly Regex ClassHeaderRegex = new(
+        @"class\s+(\w+)\s+extends\s+(\w+)",
+        RegexOptions.IgnoreCase);
+
+    // -------------------------------------------------------------------------
     // Public API
     // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Parses the class name and parent class name from the file header.
+    /// returns null if the header cannot be found or parsed.
+    /// </summary>
+    public static ClassHeader? ParseClassHeader(string filePath)
+    {
+        string? content = TryReadFile(filePath);
+        if (content == null) return null;
+
+        var m = ClassHeaderRegex.Match(content);
+        if (!m.Success) return null;
+
+        return new ClassHeader
+        {
+            Name = m.Groups[1].Value,
+            ParentName = m.Groups[2].Value
+        };
+    }
 
     /// <summary>
     /// Reads a .uc file, extracts only the variable declaration section (up to
@@ -125,32 +151,30 @@ public static class UnrealScriptParser
         {
             string innerArrayType = m.Groups[1].Value;  // array<T>
             string simpleType = m.Groups[2].Value;      // T or T[]
-            string varName = m.Groups[3].Value;
+            string nameList = m.Groups[3].Value;        // a, b, c
 
-            string baseType;
-            bool isArray;
+            string baseType = !string.IsNullOrEmpty(innerArrayType) ? innerArrayType : simpleType;
+            bool isArrayFromType = !string.IsNullOrEmpty(innerArrayType) || m.Groups[2].Value.Contains('[');
 
-            if (!string.IsNullOrEmpty(innerArrayType))
+            foreach (var rawName in nameList.Split(','))
             {
-                baseType = innerArrayType;
-                isArray = true;
+                string namePart = rawName.Trim();
+                if (string.IsNullOrEmpty(namePart)) continue;
+
+                bool isArray = isArrayFromType || namePart.Contains('[');
+                string cleanName = namePart.Split('[')[0].Trim();
+                
+                // Clean baseType if it has brackets
+                string cleanBaseType = baseType.Split('[')[0].Trim();
+
+                results.Add(new ConfigVarDecl
+                {
+                    Name = cleanName,
+                    TypeName = isArray ? cleanBaseType + "[]" : cleanBaseType,
+                    BaseType = cleanBaseType,
+                    IsArray = isArray,
+                });
             }
-            else
-            {
-                baseType = simpleType;
-                // Detect array from "Type[]" form in the original match text
-                isArray = m.Value.Contains('[');
-            }
-
-            string typeName = isArray ? baseType + "[]" : baseType;
-
-            results.Add(new ConfigVarDecl
-            {
-                Name = varName,
-                TypeName = typeName,
-                BaseType = baseType,
-                IsArray = isArray,
-            });
         }
 
         return results;
@@ -306,29 +330,30 @@ public static class UnrealScriptParser
         {
             string innerArrayType = m.Groups[1].Value;
             string simpleType = m.Groups[2].Value;
-            string fieldName = m.Groups[3].Value;
+            string nameList = m.Groups[3].Value;
 
-            string baseType;
-            bool isArray;
+            string baseType = !string.IsNullOrEmpty(innerArrayType) ? innerArrayType : simpleType;
+            bool isArrayFromType = !string.IsNullOrEmpty(innerArrayType) || m.Groups[2].Value.Contains('[');
 
-            if (!string.IsNullOrEmpty(innerArrayType))
+            foreach (var rawName in nameList.Split(','))
             {
-                baseType = innerArrayType;
-                isArray = true;
+                string namePart = rawName.Trim();
+                if (string.IsNullOrEmpty(namePart)) continue;
+
+                bool isArray = isArrayFromType || namePart.Contains('[');
+                string cleanName = namePart.Split('[')[0].Trim();
+                
+                // Clean baseType
+                string cleanBaseType = baseType.Split('[')[0].Trim();
+
+                fields.Add(new StructFieldDecl
+                {
+                    Name = cleanName,
+                    TypeName = isArray ? cleanBaseType + "[]" : cleanBaseType,
+                    BaseType = cleanBaseType,
+                    IsArray = isArray,
+                });
             }
-            else
-            {
-                baseType = simpleType;
-                isArray = m.Value.Contains('[');
-            }
-
-            fields.Add(new StructFieldDecl
-            {
-                Name = fieldName,
-                TypeName = isArray ? baseType + "[]" : baseType,
-                BaseType = baseType,
-                IsArray = isArray,
-            });
         }
 
         return fields;
@@ -337,6 +362,13 @@ public static class UnrealScriptParser
 
 // -------------------------------------------------------------------------
 // Data types returned by UnrealScriptParser
+/// <summary>Parsed class header information.</summary>
+public sealed class ClassHeader
+{
+    public string Name { get; init; } = "";
+    public string ParentName { get; init; } = "";
+}
+
 // -------------------------------------------------------------------------
 
 /// <summary>A parsed config variable declaration from a .uc class file.</summary>

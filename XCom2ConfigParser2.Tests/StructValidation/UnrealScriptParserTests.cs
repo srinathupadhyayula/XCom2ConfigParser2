@@ -96,6 +96,37 @@ public class UnrealScriptParserTests : IDisposable
     }
 
     [Fact]
+    public void ParseConfigVariables_MultipleVariablesOnOneLine_ReturnsAll()
+    {
+        var file = Write("var config int A, B, C;");
+        var result = UnrealScriptParser.ParseConfigVariables(file);
+        result.ShouldNotBeNull();
+        result.Count.ShouldBe(3);
+        result.ShouldContain(v => v.Name == "A" && v.BaseType == "int");
+        result.ShouldContain(v => v.Name == "B" && v.BaseType == "int");
+        result.ShouldContain(v => v.Name == "C" && v.BaseType == "int");
+    }
+
+    [Fact]
+    public void ParseConfigVariables_MultipleVariablesWithBrackets_ReturnsCorrectIsArray()
+    {
+        var file = Write("var config int A, B[10], C;");
+        var result = UnrealScriptParser.ParseConfigVariables(file);
+        result.ShouldNotBeNull();
+        result.Count.ShouldBe(3);
+        
+        var a = result.First(v => v.Name == "A");
+        a.IsArray.ShouldBeFalse();
+
+        var b = result.First(v => v.Name == "B");
+        b.IsArray.ShouldBeTrue();
+        b.TypeName.ShouldBe("int[]");
+
+        var c = result.First(v => v.Name == "C");
+        c.IsArray.ShouldBeFalse();
+    }
+
+    [Fact]
     public void ParseConfigVariables_MissingFile_ReturnsNull()
     {
         var result = UnrealScriptParser.ParseConfigVariables("/nonexistent/path/file.uc");
@@ -134,6 +165,22 @@ public class UnrealScriptParserTests : IDisposable
         var result = UnrealScriptParser.ParseStructs(file);
         result.Count.ShouldBe(1);
         result[0].Name.ShouldBe("MyNativeStruct");
+    }
+
+    [Fact]
+    public void ParseStructs_MultipleFieldsOnOneLine_ReturnsAll()
+    {
+        var file = Write("""
+            struct MyStruct
+            {
+                var int X, Y;
+            };
+            """);
+        var result = UnrealScriptParser.ParseStructs(file);
+        var s = result.ShouldHaveSingleItem();
+        s.Fields.Count.ShouldBe(2);
+        s.Fields.ShouldContain(f => f.Name == "X" && f.BaseType == "int");
+        s.Fields.ShouldContain(f => f.Name == "Y" && f.BaseType == "int");
     }
 
     [Fact]

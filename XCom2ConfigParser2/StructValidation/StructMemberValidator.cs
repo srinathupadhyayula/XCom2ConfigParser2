@@ -24,6 +24,7 @@ public sealed class StructMemberValidator
         _cache.ClearNegativeEntries();
 
         _varCache = new VariableCache(settings.CachePath);
+        _varCache.ClearNegativeEntries();
         _varResolver = new VariableTypeResolver(settings, modSrcCache);
         _structResolver = new StructDefinitionResolver(settings, _cache, modSrcCache);
         _enabled = enabled;
@@ -59,12 +60,15 @@ public sealed class StructMemberValidator
                 continue;
 
             var kvp = directive.Kvp!.Value;
-            string propertyName = kvp.GetPropertyName(text);
+            string propertyValueString = kvp.GetValue(text);
+            PropValue? value = TryParseValue(propertyValueString);
+            bool isStructLiteral = value is StructValue;
+            bool hasArrayPrefix = kvp.Operation != KvpOperation.Set;
 
-            // Strip array index suffix from property name
+            string propertyName = kvp.GetPropertyName(text);
             propertyName = StripIndexSuffix(propertyName);
 
-            // Phase 1: Get variable type — check session cache first to avoid re-parsing .uc files
+            // Phase 2: Resolve variable type
             VariableTypeResolutionResult varTypeResult;
             if (!_varCache.TryGet(currentSection, propertyName, out var cachedVarResult))
             {
@@ -76,48 +80,46 @@ public sealed class StructMemberValidator
                 varTypeResult = cachedVarResult;
             }
 
+            // Case A: Variable resolution failed
             if (!varTypeResult.Found || string.IsNullOrEmpty(varTypeResult.BaseType))
             {
-                diagnostics.Add(CreateStructDefNotFoundWarning(
-                    currentSection, propertyName, "Unknown type",
-                    kvp.ValueSpan, text, varTypeResult.SearchedPaths));
+                // If value IS a struct literal but we can't find the definition, WARN.
+                if (isStructLiteral)
+                {
+                    diagnostics.Add(CreateStructDefNotFoundWarning(
+                        currentSection, propertyName, "Unknown type",
+                        kvp.ValueSpan, text, varTypeResult.SearchedPaths));
+                }
                 continue;
             }
 
-            // Check for array prefix on non-array property
+            // Case B: Variable resolution succeeded
             bool isArrayType = varTypeResult.FullType?.EndsWith("[]") == true;
-            bool hasPrefix = kvp.Operation != KvpOperation.Set;
 
-            if (hasPrefix && !isArrayType)
+            // Check for array prefix usage correctly
+            if (hasArrayPrefix && !isArrayType)
             {
                 diagnostics.Add(CreateArrayPrefixOnNonArrayError(
                     kvp.Operation, propertyName, varTypeResult.FullType,
                     kvp.IdentSpan, text, currentSection));
             }
 
-            // Skip non-struct types (uses shared KnownPrimitives — no allocation)
-            if (UnrealScriptParser.KnownPrimitives.Contains(varTypeResult.BaseType))
-                continue;
-
-            // Parse value — if it's a struct literal, validate its members
-            PropValue? value = TryParseValue(kvp.ValueSpan, text);
-            if (value is not StructValue structValue)
-                continue;
-
-            // Phase 2: Get struct definition
-            var structResult = _structResolver.Resolve(varTypeResult.BaseType);
-            if (!structResult.Found || structResult.StructDef == null)
+            // If it's a struct property and we have a structural value, validate members
+            if (isStructLiteral && value is StructValue structValue && !UnrealScriptParser.KnownPrimitives.Contains(varTypeResult.BaseType))
             {
-                diagnostics.Add(CreateStructDefNotFoundWarning(
-                    currentSection, propertyName, varTypeResult.BaseType,
-                    kvp.ValueSpan, text, structResult.SearchedPaths));
-                continue;
-            }
+                var structResult = _structResolver.Resolve(varTypeResult.BaseType);
+                if (!structResult.Found || structResult.StructDef == null)
+                {
+                    diagnostics.Add(CreateStructDefNotFoundWarning(
+                        currentSection, propertyName, varTypeResult.BaseType,
+                        kvp.ValueSpan, text, structResult.SearchedPaths));
+                    continue;
+                }
 
-            // Validate field names
-            diagnostics.AddRange(ValidateStructMembers(
-                structResult.StructDef, structValue,
-                kvp.ValueSpan, text, currentSection, propertyName));
+                diagnostics.AddRange(ValidateStructMembers(
+                    structResult.StructDef, structValue,
+                    kvp.ValueSpan, text, currentSection, propertyName));
+            }
         }
 
         return diagnostics;
@@ -136,10 +138,9 @@ public sealed class StructMemberValidator
         return propertyName;
     }
 
-    private PropValue? TryParseValue(Span valueSpan, string text)
+    private PropValue? TryParseValue(string value)
     {
-        string value = valueSpan.Extract(text).Trim();
-        return StructParser.TryParse(value);
+        return StructParser.TryParse(value.Trim());
     }
 
     private IEnumerable<Diagnostic> ValidateStructMembers(
@@ -192,9 +193,19 @@ public sealed class StructMemberValidator
         string text,
         IReadOnlyList<string> searchedPaths)
     {
+        string pathsSummary;
+        if (searchedPaths.Count <= 5)
+        {
+            pathsSummary = string.Join(", ", searchedPaths);
+        }
+        else
+        {
+            pathsSummary = string.Join(", ", searchedPaths.Take(5)) + $", ... and {searchedPaths.Count - 5} more. See the full report for details.";
+        }
+
         string message = $"Could not resolve struct definition for [{sectionName}] " +
             $"property \"{propertyName}\" (type: {typeName}). Struct member validation skipped.\n" +
-            $"  Searched: {string.Join(", ", searchedPaths)}";
+            $"  Searched: {pathsSummary}";
 
         return CreateDiagnostic(
             ErrorCode.StructDefNotFound,

@@ -6,9 +6,9 @@ namespace XCom2ConfigParser2.StructValidation;
 /// Search order (matches StructFileLocator for consistency):
 ///   1. Local Src
 ///   2. Mods Compiled Against
-///   3. SDK SrcOrig
-///   4. Community Highlander
-///   5. Alien Highlander
+///   3. Community Highlander
+///   4. Alien Highlander
+///   5. SDK SrcOrig
 ///   6. All Mods (via ModSrcPathCache, package-targeted)
 /// </summary>
 public sealed class ClassFileLocator
@@ -29,17 +29,41 @@ public sealed class ClassFileLocator
 
         ClassFileResult TryInRoot(string root, string sourceLabel)
         {
+            if (string.IsNullOrEmpty(packageName))
+            {
+                // Global search: search all package subdirectories in this root
+                try
+                {
+                    foreach (var pkgDir in Directory.EnumerateDirectories(root))
+                    {
+                        string primary = Path.Combine(pkgDir, "Classes", fileName);
+                        if (File.Exists(primary))
+                            return ClassFileResult.Success(primary, sourceLabel);
+                        
+                        string alt = Path.Combine(pkgDir, fileName);
+                        if (File.Exists(alt))
+                            return ClassFileResult.Success(alt, sourceLabel);
+                    }
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Skip inaccessible roots or continue search
+                }
+                
+                return ClassFileResult.NotFound(searched);
+            }
+
             // Convention: <root>/<Package>/Classes/<Class>.uc
-            string primary = Path.Combine(root, packageName, "Classes", fileName);
-            if (File.Exists(primary))
-                return ClassFileResult.Success(primary, sourceLabel);
-            searched.Add(primary);
+            string primaryPath = Path.Combine(root, packageName, "Classes", fileName);
+            if (File.Exists(primaryPath))
+                return ClassFileResult.Success(primaryPath, sourceLabel);
+            searched.Add(primaryPath);
 
             // Fallback (no Classes subdirectory): <root>/<Package>/<Class>.uc
-            string alt = Path.Combine(root, packageName, fileName);
-            if (File.Exists(alt))
-                return ClassFileResult.Success(alt, sourceLabel);
-            searched.Add(alt);
+            string altPath = Path.Combine(root, packageName, fileName);
+            if (File.Exists(altPath))
+                return ClassFileResult.Success(altPath, sourceLabel);
+            searched.Add(altPath);
 
             return ClassFileResult.NotFound(searched);
         }
@@ -58,25 +82,25 @@ public sealed class ClassFileLocator
             if (r.Found) return r;
         }
 
-        // 3. SDK SrcOrig (base game source — should come before Highlander overrides)
-        if (!string.IsNullOrEmpty(_settings.SdkRoot))
-        {
-            string sdkSrc = Path.Combine(_settings.SdkRoot, "Development", "SrcOrig");
-            var r = TryInRoot(sdkSrc, "SDK");
-            if (r.Found) return r;
-        }
-
-        // 4. Community Highlander
+        // 3. Community Highlander
         if (!string.IsNullOrEmpty(_settings.CommunityHighlanderPath))
         {
             var r = TryInRoot(_settings.CommunityHighlanderPath, "CommunityHighlander");
             if (r.Found) return r;
         }
 
-        // 5. Alien Highlander
+        // 4. Alien Highlander
         if (!string.IsNullOrEmpty(_settings.AlienHighlanderPath))
         {
             var r = TryInRoot(_settings.AlienHighlanderPath, "AlienHighlander");
+            if (r.Found) return r;
+        }
+
+        // 5. SDK SrcOrig (base game source — should come AFTER Highlander overrides)
+        if (!string.IsNullOrEmpty(_settings.SdkRoot))
+        {
+            string sdkSrc = Path.Combine(_settings.SdkRoot, "Development", "SrcOrig");
+            var r = TryInRoot(sdkSrc, "SDK");
             if (r.Found) return r;
         }
 

@@ -16,10 +16,10 @@ public sealed class StructCache
 
     private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
 
-    public StructCache(string cacheDir)
+    public StructCache(string cacheRootDir)
     {
-        _cacheDir = cacheDir;
-        Directory.CreateDirectory(cacheDir);
+        _cacheDir = Path.Combine(cacheRootDir, "structsmap");
+        Directory.CreateDirectory(_cacheDir);
     }
 
     /// <summary>

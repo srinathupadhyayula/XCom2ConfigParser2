@@ -12,7 +12,7 @@ public class VariableCacheTests
     [Fact]
     public void VariableCache_TryGet_MissingEntry_ReturnsFalse()
     {
-        var cache = new VariableCache();
+        var cache = new VariableCache(Path.GetTempPath());
 
         var found = cache.TryGet("[MyPackage.MyClass]", "MyProp", out var result);
 
@@ -23,8 +23,8 @@ public class VariableCacheTests
     [Fact]
     public void VariableCache_Set_ThenTryGet_ReturnsCachedValue()
     {
-        var cache = new VariableCache();
-        var expected = VariableTypeResolutionResult.Success("MyStruct", "MyStruct[]", "Src/Test.uc", Array.Empty<string>());
+        var cache = new VariableCache(Path.GetTempPath());
+        var expected = VariableTypeResolutionResult.Success("MyStruct", "MyStruct[]", "", Array.Empty<string>());
 
         cache.Set("[MyPackage.MyClass]", "MyProp", expected);
         var found = cache.TryGet("[MyPackage.MyClass]", "MyProp", out var result);
@@ -38,8 +38,8 @@ public class VariableCacheTests
     [Fact]
     public void VariableCache_IsCaseInsensitive_OnPropertyName()
     {
-        var cache = new VariableCache();
-        var value = VariableTypeResolutionResult.Success("int", "int", "Src/Test.uc", Array.Empty<string>());
+        var cache = new VariableCache(Path.GetTempPath());
+        var value = VariableTypeResolutionResult.Success("int", "int", "", Array.Empty<string>());
 
         cache.Set("[Pkg.Class]", "MyProperty", value);
 
@@ -50,8 +50,8 @@ public class VariableCacheTests
     [Fact]
     public void VariableCache_IsCaseInsensitive_OnSectionName()
     {
-        var cache = new VariableCache();
-        var value = VariableTypeResolutionResult.Success("int", "int", "Src/Test.uc", Array.Empty<string>());
+        var cache = new VariableCache(Path.GetTempPath());
+        var value = VariableTypeResolutionResult.Success("int", "int", "", Array.Empty<string>());
 
         cache.Set("[MyPkg.MyClass]", "Prop", value);
 
@@ -61,9 +61,9 @@ public class VariableCacheTests
     [Fact]
     public void VariableCache_DifferentProperties_AreCachedIndependently()
     {
-        var cache = new VariableCache();
-        var v1 = VariableTypeResolutionResult.Success("int", "int", "f.uc", Array.Empty<string>());
-        var v2 = VariableTypeResolutionResult.Success("bool", "bool", "f.uc", Array.Empty<string>());
+        var cache = new VariableCache(Path.GetTempPath());
+        var v1 = VariableTypeResolutionResult.Success("int", "int", "", Array.Empty<string>());
+        var v2 = VariableTypeResolutionResult.Success("bool", "bool", "", Array.Empty<string>());
 
         cache.Set("[Pkg.Class]", "Prop1", v1);
         cache.Set("[Pkg.Class]", "Prop2", v2);
@@ -77,9 +77,9 @@ public class VariableCacheTests
     [Fact]
     public void VariableCache_DifferentSections_AreCachedIndependently()
     {
-        var cache = new VariableCache();
-        var v1 = VariableTypeResolutionResult.Success("int", "int", "f.uc", Array.Empty<string>());
-        var v2 = VariableTypeResolutionResult.Success("bool", "bool", "f.uc", Array.Empty<string>());
+        var cache = new VariableCache(Path.GetTempPath());
+        var v1 = VariableTypeResolutionResult.Success("int", "int", "", Array.Empty<string>());
+        var v2 = VariableTypeResolutionResult.Success("bool", "bool", "", Array.Empty<string>());
 
         cache.Set("[PkgA.ClassA]", "Prop", v1);
         cache.Set("[PkgB.ClassB]", "Prop", v2);
@@ -93,7 +93,7 @@ public class VariableCacheTests
     [Fact]
     public void VariableCache_NotFound_CanAlsoBeStored()
     {
-        var cache = new VariableCache();
+        var cache = new VariableCache(Path.GetTempPath());
         var notFound = VariableTypeResolutionResult.NotFound(new[] { "Searched/Path.uc" });
 
         cache.Set("[Pkg.Class]", "Missing", notFound);

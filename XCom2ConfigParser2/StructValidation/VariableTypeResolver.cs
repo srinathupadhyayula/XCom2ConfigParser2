@@ -15,44 +15,85 @@ public sealed class VariableTypeResolver
 
     public VariableTypeResolutionResult Resolve(string sectionName, string propertyName)
     {
-        // Parse section header: [PackageName.ClassName]
-        if (!TryParseSectionName(sectionName, out var packageName, out var className))
+        // Parse section header: [PackageName.ClassName] or [ObjectName ClassName]
+        if (!TryParseSectionName(sectionName, out var packageName, out var className, out var isPackageTargeted))
             return VariableTypeResolutionResult.NotFound(new[] { "Invalid section format" });
 
-        // Locate class file
-        var classFileResult = _locator.Locate(packageName, className);
-        if (!classFileResult.Found)
-            return VariableTypeResolutionResult.NotFound(classFileResult.SearchedPaths);
+        string currentClassName = className;
+        string currentPackageName = packageName;
+        bool currentlyTargeted = isPackageTargeted;
+        var allSearched = new List<string>();
 
-        // Parse only config variable declarations (stops at first 'function' keyword)
-        var vars = UnrealScriptParser.ParseConfigVariables(classFileResult.FilePath!);
-        if (vars == null)
-            return VariableTypeResolutionResult.NotFound(
-                new[] { $"Could not read file: {classFileResult.FilePath}" });
+        // Follow inheritance up to 10 levels deep
+        for (int depth = 0; depth < 10; depth++)
+        {
+            // Locate current class
+            var classResult = (currentlyTargeted && !string.IsNullOrEmpty(currentPackageName))
+                ? _locator.Locate(currentPackageName, currentClassName)
+                : _locator.Locate("", currentClassName);
 
-        // Case-insensitive lookup by variable name
-        var decl = vars.FirstOrDefault(v =>
-            string.Equals(v.Name, propertyName, StringComparison.OrdinalIgnoreCase));
+            // Accumulate searched paths for better diagnostics
+            foreach (var path in classResult.SearchedPaths)
+            {
+                if (!allSearched.Contains(path))
+                    allSearched.Add(path);
+            }
 
-        if (decl == null)
-            return VariableTypeResolutionResult.NotFound(
-                new[] { $"Config property '{propertyName}' not found in {classFileResult.FilePath}" });
+            if (!classResult.Found)
+                break;
 
-        return VariableTypeResolutionResult.Success(
-            decl.BaseType, decl.TypeName, classFileResult.FilePath!, classFileResult.SearchedPaths);
+            // Parse variables in this file
+            var vars = UnrealScriptParser.ParseConfigVariables(classResult.FilePath!);
+            if (vars != null)
+            {
+                var decl = vars.FirstOrDefault(v =>
+                    string.Equals(v.Name, propertyName, StringComparison.OrdinalIgnoreCase));
+
+                if (decl != null)
+                {
+                    return VariableTypeResolutionResult.Success(
+                        decl.BaseType, decl.TypeName, classResult.FilePath!, allSearched);
+                }
+            }
+
+            // Crawl up to parent class
+            var header = UnrealScriptParser.ParseClassHeader(classResult.FilePath!);
+            if (header == null || string.IsNullOrEmpty(header.ParentName) ||
+                string.Equals(header.ParentName, "Object", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(header.ParentName, "Actor", StringComparison.OrdinalIgnoreCase))
+            {
+                break;
+            }
+
+            // Move to parent. We switch to global search (packageName="") because parents
+            // are often in different packages (e.g. XComGame, Core, Engine).
+            currentClassName = header.ParentName;
+            currentlyTargeted = false;
+        }
+
+        return VariableTypeResolutionResult.NotFound(allSearched);
     }
 
-    private static bool TryParseSectionName(string sectionName, out string packageName, out string className)
+    private static bool TryParseSectionName(string sectionName, out string packageName, out string className, out bool isPackageTargeted)
     {
         packageName = "";
         className = "";
+        isPackageTargeted = false;
 
-        int dotIndex = sectionName.LastIndexOf('.');
-        if (dotIndex <= 0 || dotIndex >= sectionName.Length - 1)
-            return false;
+        // Common format in XCOM 2: [PackageName.ClassName] or [ObjectName ClassName]
+        int separatorIndex = sectionName.LastIndexOfAny(new[] { '.', ' ', '\t' });
+        if (separatorIndex <= 0 || separatorIndex >= sectionName.Length - 1)
+        {
+            // Case where its just [ClassName] (Global search)
+            className = sectionName;
+            return !string.IsNullOrEmpty(className);
+        }
 
-        packageName = sectionName.Substring(0, dotIndex);
-        className = sectionName.Substring(dotIndex + 1);
+        char separator = sectionName[separatorIndex];
+        isPackageTargeted = (separator == '.');
+
+        packageName = sectionName.Substring(0, separatorIndex).TrimEnd();
+        className = sectionName.Substring(separatorIndex + 1).TrimStart();
         return !string.IsNullOrEmpty(packageName) && !string.IsNullOrEmpty(className);
     }
 }

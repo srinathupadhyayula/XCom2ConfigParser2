@@ -7,79 +7,79 @@ namespace XCom2ConfigParser2.StructValidation;
 /// <summary>
 /// Persistent cache for resolved config variable types.
 /// Maps (sectionName, propertyName) to a <see cref="VariableTypeResolutionResult"/>.
+/// One file per variable in 'variablesmap' subdirectory.
 /// </summary>
 public sealed class VariableCache
 {
-    private readonly record struct CacheKey(string SectionName, string PropertyName);
+    private readonly string _cacheDir;
+    private readonly TimeSpan _maxAge = TimeSpan.FromHours(24);
+    private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
 
     public sealed class CachedVariableEntry
     {
+        public string SectionName { get; set; } = string.Empty;
+        public string PropertyName { get; set; } = string.Empty;
         public VariableTypeResolutionResult Result { get; set; } = null!;
         public string SourceHash { get; set; } = string.Empty;
         public DateTime LastIndexed { get; set; }
+        public bool NotFound { get; set; }
     }
 
-    private readonly Dictionary<string, Dictionary<string, CachedVariableEntry>> _cache;
-    private readonly string _cacheFile;
-    private readonly TimeSpan _maxAge = TimeSpan.FromHours(24);
-    private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
-    private bool _isDirty = false;
-
-    public VariableCache(string cacheDir)
+    public VariableCache(string cacheRootDir)
     {
-        Directory.CreateDirectory(cacheDir);
-        _cacheFile = Path.Combine(cacheDir, "variables.json");
-        _cache = LoadCache();
-    }
-
-    private Dictionary<string, Dictionary<string, CachedVariableEntry>> LoadCache()
-    {
-        if (!File.Exists(_cacheFile))
-            return new(StringComparer.OrdinalIgnoreCase);
-
-        try
-        {
-            var data = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, CachedVariableEntry>>>(File.ReadAllText(_cacheFile));
-            if (data == null)
-                return new(StringComparer.OrdinalIgnoreCase);
-
-            var dict = new Dictionary<string, Dictionary<string, CachedVariableEntry>>(StringComparer.OrdinalIgnoreCase);
-            foreach (var kvp in data)
-            {
-                dict[kvp.Key] = new Dictionary<string, CachedVariableEntry>(kvp.Value, StringComparer.OrdinalIgnoreCase);
-            }
-            return dict;
-        }
-        catch
-        {
-            return new(StringComparer.OrdinalIgnoreCase);
-        }
+        _cacheDir = Path.Combine(cacheRootDir, "variablesmap");
+        Directory.CreateDirectory(_cacheDir);
     }
 
     public void Save()
     {
-        if (!_isDirty)
-            return;
-
-        try
-        {
-            File.WriteAllText(_cacheFile, JsonSerializer.Serialize(_cache, _jsonOptions));
-            _isDirty = false;
-        }
-        catch { /* Ignore IO errors on cache save */ }
+        // No-op for directory-based cache, files are saved immediately in Set()
     }
 
     public void Clear()
     {
-        _cache.Clear();
-        _isDirty = true;
-        Save();
+        if (!Directory.Exists(_cacheDir)) return;
+        foreach (var file in Directory.EnumerateFiles(_cacheDir, "*.json"))
+        {
+            try { File.Delete(file); } catch { }
+        }
+    }
+
+    public void ClearNegativeEntries()
+    {
+        if (!Directory.Exists(_cacheDir)) return;
+        foreach (var file in Directory.EnumerateFiles(_cacheDir, "*.json"))
+        {
+            try
+            {
+                var entry = JsonSerializer.Deserialize<CachedVariableEntry>(File.ReadAllText(file));
+                if (entry?.NotFound == true)
+                {
+                    File.Delete(file);
+                }
+            }
+            catch { }
+        }
     }
 
     public bool TryGet(string sectionName, string propertyName, out VariableTypeResolutionResult result)
     {
-        if (_cache.TryGetValue(sectionName, out var props) && props.TryGetValue(propertyName, out var entry))
+        string cacheFile = GetCachePath(sectionName, propertyName);
+        if (!File.Exists(cacheFile))
         {
+            result = null!;
+            return false;
+        }
+
+        try
+        {
+            var entry = JsonSerializer.Deserialize<CachedVariableEntry>(File.ReadAllText(cacheFile));
+            if (entry == null || entry.NotFound)
+            {
+                result = null!;
+                return false;
+            }
+
             // Validate age
             if (DateTime.UtcNow - entry.LastIndexed > _maxAge)
             {
@@ -87,7 +87,7 @@ public sealed class VariableCache
                 return false;
             }
 
-            // If it's a found variable, validate source file hash
+            // Validate source file if found
             if (entry.Result.Found && !string.IsNullOrEmpty(entry.Result.ClassFilePath))
             {
                 if (!File.Exists(entry.Result.ClassFilePath))
@@ -106,36 +106,55 @@ public sealed class VariableCache
             result = entry.Result;
             return true;
         }
-
-        result = null!;
-        return false;
+        catch
+        {
+            result = null!;
+            return false;
+        }
     }
 
     public void Set(string sectionName, string propertyName, VariableTypeResolutionResult result)
     {
-        if (!_cache.TryGetValue(sectionName, out var props))
-        {
-            props = new Dictionary<string, CachedVariableEntry>(StringComparer.OrdinalIgnoreCase);
-            _cache[sectionName] = props;
-        }
-
         string hash = "";
         if (result.Found && !string.IsNullOrEmpty(result.ClassFilePath) && File.Exists(result.ClassFilePath))
         {
             hash = ComputeHash(result.ClassFilePath);
         }
 
-        props[propertyName] = new CachedVariableEntry
+        var entry = new CachedVariableEntry
         {
+            SectionName = sectionName,
+            PropertyName = propertyName,
             Result = result,
             SourceHash = hash,
-            LastIndexed = DateTime.UtcNow
+            LastIndexed = DateTime.UtcNow,
+            NotFound = !result.Found
         };
 
-        _isDirty = true;
+        string cacheFile = GetCachePath(sectionName, propertyName);
+        File.WriteAllText(cacheFile, JsonSerializer.Serialize(entry, _jsonOptions));
     }
 
-    public int Count => _cache.Values.Sum(v => v.Count);
+    public int Count => Directory.Exists(_cacheDir) ? Directory.GetFiles(_cacheDir, "*.json").Length : 0;
+
+    private string GetCachePath(string sectionName, string propertyName)
+    {
+        string safeName = $"{sectionName}_{propertyName}";
+        foreach (char c in Path.GetInvalidFileNameChars())
+        {
+            safeName = safeName.Replace(c, '_');
+        }
+        
+        // Handle potentially very long paths by hashing if too long
+        if (safeName.Length > 150)
+        {
+            using var sha1 = SHA1.Create();
+            byte[] hash = sha1.ComputeHash(System.Text.Encoding.UTF8.GetBytes(safeName));
+            safeName = BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+        }
+
+        return Path.Combine(_cacheDir, safeName + ".json");
+    }
 
     private static string ComputeHash(string filePath)
     {
