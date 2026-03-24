@@ -82,7 +82,7 @@ public sealed class FileProcessor
         var mergedLines = LineSplitter.GetMergedLines(content, lines);
 
         // Check for space after continuation
-        foreach (var (lineText, firstSpan, hasTrailingContinuation) in mergedLines)
+        foreach (var (lineText, firstSpan, lastSpan, hasTrailingContinuation) in mergedLines)
         {
             if (hasTrailingContinuation)
             {

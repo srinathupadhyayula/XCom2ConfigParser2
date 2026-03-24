@@ -15,22 +15,26 @@ public interface IValidator
 /// <summary>
 /// Simple syntax validator implementing UE3 grammar rules.
 /// </summary>
-public sealed class SimpleSyntaxValidator : IValidator
+public sealed class SyntaxValidator : IValidator
 {
-    // Property name: MyProp, MyProp[0], MyProp(1)
+    // Property name: MyProp, MyProp[0], MyProp(1), MyProp[eStat_Will]
     private static readonly Regex PropertyNameRegex =
-        new(@"^[A-Za-z][A-Za-z0-9_]*(?:\[(?:0|[1-9][0-9]*)\]|\((?:0|[1-9][0-9]*)\))?$");
+        new(@"^[A-Za-z][A-Za-z0-9_]*(?:\[[A-Za-z0-9_]*\]|\([A-Za-z0-9_]*\))?$");
 
     // Section object name: IDENT or IDENT IDENT
     private static readonly Regex ObjectNameRegex =
-        new(@"^[A-Za-z][A-Za-z0-9_]*(?:[ .][A-Za-z][A-Za-z0-9_]*)?$");
+        new(@"^[A-Za-z][A-Za-z0-9_]*(?:[ \t.]+[A-Za-z][A-Za-z0-9_]*)?$");
+
+    // Value literal (names/unquoted strings in config): allows dots, underscores, slashes, colons, hyphens, alphanumeric
+    private static readonly Regex ValueLiteralRegex =
+        new(@"^[A-Za-z0-9_][A-Za-z0-9_./:-]*$");
 
     // Boolean values (case-insensitive)
     private static readonly HashSet<string> Booleans =
         new(StringComparer.OrdinalIgnoreCase) { "true", "false" };
 
-    // Number pattern
-    private static readonly Regex NumberRegex = new(@"^-?[0-9]+\.?[0-9]*$");
+    // Number pattern (including f suffix and leading dots like .5f)
+    private static readonly Regex NumberRegex = new(@"^-?(?:[0-9]+\.?[0-9]*|\.[0-9]+)[fF]?$");
 
     public IReadOnlyList<Diagnostic> Validate(string text, List<Directive> directives, string filePath)
     {
@@ -69,7 +73,7 @@ public sealed class SimpleSyntaxValidator : IValidator
 
         // Check for malformed header: space before ] or trailing space after ]
         bool isMalformed = false;
-        
+
         // Check if there's whitespace before the closing bracket
         if (fullText.Length >= 2 && fullText.StartsWith("[") && fullText.EndsWith("]"))
         {
@@ -79,7 +83,7 @@ public sealed class SimpleSyntaxValidator : IValidator
                 isMalformed = true;
             }
         }
-        
+
         // Check for trailing space after ]
         if (fullText.EndsWith(" ") || fullText.EndsWith("\t"))
         {
@@ -166,7 +170,7 @@ public sealed class SimpleSyntaxValidator : IValidator
         if (NumberRegex.IsMatch(value))
             yield break;
 
-        if (IsIdentifier(value))
+        if (IsPossibleNameLiteral(value))
             yield break;
 
         if (value.StartsWith("\"") && value.EndsWith("\"") && value.Length >= 2)
@@ -206,9 +210,9 @@ public sealed class SimpleSyntaxValidator : IValidator
         }
     }
 
-    private bool IsIdentifier(string value)
+    private bool IsPossibleNameLiteral(string value)
     {
-        return PropertyNameRegex.IsMatch(value);
+        return ValueLiteralRegex.IsMatch(value);
     }
 
     private Diagnostic CreateDiagnostic(
@@ -259,7 +263,8 @@ public sealed class SimpleSyntaxValidator : IValidator
         return new Diagnostic(
             code,
             message,
-            new SpanWithLocation(new Span(safeStart, safeEnd), new SourceLocation(startLine, startCol), new SourceLocation(endLine, endCol)),
+            new SpanWithLocation(new Span(safeStart, safeEnd), new SourceLocation(startLine, startCol),
+                new SourceLocation(endLine, endCol)),
             sourceLine,
             severity);
     }

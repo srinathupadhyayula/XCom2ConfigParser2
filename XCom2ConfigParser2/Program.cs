@@ -21,7 +21,7 @@ public sealed class Program
             config.AddExample(new[] { "--settings", "\"D:\\MyMod\\.vscode\\settings.json\"" });
             config.AddExample(new[] { "\"D:\\MyMod\\Config\\\"" });
         });
-        
+
         try
         {
             return await app.RunAsync(args);
@@ -66,7 +66,8 @@ public sealed class ParseCommandSettings : CommandSettings
     public string? Pattern { get; init; }
 
     [CommandOption("-P|--project-root")]
-    [Description("Path to project root directory containing .vscode/settings.json (auto-detected from current directory if not specified)")]
+    [Description(
+        "Path to project root directory containing .vscode/settings.json (auto-detected from current directory if not specified)")]
     public string? ProjectRoot { get; init; }
 
     [CommandOption("-S|--settings")]
@@ -86,34 +87,39 @@ public sealed class ParseCommandSettings : CommandSettings
     public bool ForceReindex { get; init; }
 
     [CommandOption("--log")]
-    [Description("Generate categorized log file in cache directory")]
-    public bool Log { get; init; }
+    [Description("Generate categorized log file (enabled by default)")]
+    [DefaultValue(true)]
+    public bool Log { get; init; } = true;
 }
 
 public sealed class ParseCommand : AsyncCommand<ParseCommandSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, ParseCommandSettings cmdSettings, CancellationToken cancellationToken)
+    public override async Task<int> ExecuteAsync(CommandContext context, ParseCommandSettings cmdSettings,
+        CancellationToken cancellationToken)
     {
         var console = AnsiConsole.Console;
 
         bool recursive = cmdSettings.Recursive && !cmdSettings.NoRecursive;
-        string pattern = string.IsNullOrEmpty(cmdSettings.Pattern) 
-            ? (recursive ? "**/*.ini" : "*.ini") 
+        string pattern = string.IsNullOrEmpty(cmdSettings.Pattern)
+            ? (recursive ? "**/*.ini" : "*.ini")
             : cmdSettings.Pattern;
 
         // Determine project root and settings location
         string settingsFile;
         string effectiveProjectRoot;
-        
+
         if (!string.IsNullOrEmpty(cmdSettings.SettingsPath))
         {
             if (!File.Exists(cmdSettings.SettingsPath))
             {
-                console.MarkupLine($"[red]Error: Settings file not found: {Markup.Escape(cmdSettings.SettingsPath)}[/]");
+                console.MarkupLine(
+                    $"[red]Error: Settings file not found: {Markup.Escape(cmdSettings.SettingsPath)}[/]");
                 return 4;
             }
+
             settingsFile = Path.GetFullPath(cmdSettings.SettingsPath);
-            effectiveProjectRoot = Path.GetDirectoryName(Path.GetDirectoryName(settingsFile)) ?? Directory.GetCurrentDirectory();
+            effectiveProjectRoot = Path.GetDirectoryName(Path.GetDirectoryName(settingsFile)) ??
+                                   Directory.GetCurrentDirectory();
         }
         else if (!string.IsNullOrEmpty(cmdSettings.ProjectRoot))
         {
@@ -131,7 +137,7 @@ public sealed class ParseCommand : AsyncCommand<ParseCommandSettings>
         var settings = settingsLoader.Load();
 
         bool hasSettingsFile = File.Exists(settingsFile);
-        
+
         if (!hasSettingsFile && string.IsNullOrEmpty(cmdSettings.Path))
         {
             console.MarkupLine("[red]Error: No .vscode/settings.json found and no input path specified.[/]");
@@ -153,9 +159,11 @@ public sealed class ParseCommand : AsyncCommand<ParseCommandSettings>
             }
             else
             {
-                console.MarkupLine("[yellow]Warning: .vscode/settings.json found but 'xcom.configParser.iniRoots' is not configured.[/]");
+                console.MarkupLine(
+                    "[yellow]Warning: .vscode/settings.json found but 'xcom.configParser.iniRoots' is not configured.[/]");
                 console.MarkupLine("No .ini files will be validated. Please add iniRoots to your settings.json.");
             }
+
             return settings.HasJsonParseError ? 4 : 0;
         }
 
@@ -166,12 +174,12 @@ public sealed class ParseCommand : AsyncCommand<ParseCommandSettings>
 
         var modSrcCache = new XCom2ConfigParser2.StructValidation.ModSrcPathCache(settings);
         var structCache = new XCom2ConfigParser2.StructValidation.StructCache(settings.CachePath);
-        
+
         if (cmdSettings.ForceReindex)
         {
             structCache.Clear();
             if (!cmdSettings.Quiet)
-                console.MarkupLine($"[dim]Cleared struct cache at: {Markup.Escape(settings.CachePath)}[/]");
+                console.MarkupLine($"[dim]Cleared cache at: {Markup.Escape(settings.CachePath)}[/]");
         }
 
         if (!cmdSettings.NoStructValidation)
@@ -187,34 +195,40 @@ public sealed class ParseCommand : AsyncCommand<ParseCommandSettings>
             {
                 await AnsiConsole.Status()
                     .Spinner(Spinner.Known.Dots)
-                    .StartAsync("Indexing struct definitions...", async ctx => 
+                    .StartAsync("Indexing struct definitions...", async ctx =>
                     {
-                        var indexer = new XCom2ConfigParser2.StructValidation.StructIndexer(settings, structCache, modSrcCache);
+                        var indexer =
+                            new XCom2ConfigParser2.StructValidation.StructIndexer(settings, structCache, modSrcCache);
                         var indexProgress = new Progress<XCom2ConfigParser2.StructValidation.IndexingProgress>(p =>
                         {
-                            ctx.Status($"Indexing structs... [green]{p.FilesProcessed}[/] files scanned: [blue]{System.IO.Path.GetFileName(p.CurrentFile)}[/]");
+                            ctx.Status(
+                                $"Indexing structs... [green]{p.FilesProcessed}[/] files scanned: [blue]{System.IO.Path.GetFileName(p.CurrentFile)}[/]");
                         });
-                        
+
                         indexResult = await Task.Run(() => indexer.IndexAll(indexProgress));
                     });
-                
-                console.MarkupLine($"[green]Indexing complete:[/] {indexResult!.StructsFound} structs found in {indexResult.FilesScanned} files.");
-                if (indexResult.Errors.Count > 0)
+
+                if (!cmdSettings.Quiet && !cmdSettings.Json)
                 {
-                    foreach (var err in indexResult.Errors)
-                        console.MarkupLine($"[yellow]Warning during indexing:[/] {Markup.Escape(err)}");
+                    console.MarkupLine(
+                        $"[green]Indexing complete:[/] {indexResult!.StructsFound} structs found in {indexResult.FilesScanned} files.");
+                    if (indexResult.Errors.Count > 0)
+                    {
+                        foreach (var err in indexResult.Errors)
+                            console.MarkupLine($"[yellow]Warning during indexing:[/] {Markup.Escape(err)}");
+                    }
                 }
             }
         }
 
         var processor = new FileProcessor(
-            new SimpleSyntaxValidator(),
+            new SyntaxValidator(),
             settings,
             !cmdSettings.NoStructValidation,
             modSrcCache);
 
         var files = new List<string>();
-        
+
         if (!string.IsNullOrEmpty(cmdSettings.Path))
         {
             if (File.Exists(cmdSettings.Path))
@@ -257,19 +271,24 @@ public sealed class ParseCommand : AsyncCommand<ParseCommandSettings>
 
         if (files.Count == 0)
         {
-            console.MarkupLine("[yellow]No .ini files found to validate.[/]");
+            if (!cmdSettings.Quiet)
+                console.MarkupLine("[yellow]No .ini files found to validate.[/]");
             return 0;
         }
 
-        ErrorLog? errorLog = cmdSettings.Log ? new ErrorLog 
-        { 
-            ProjectRoot = effectiveProjectRoot,
-            Summary = new ValidationResultSummary()
-        } : null;
+        ErrorLog? errorLog = cmdSettings.Log
+            ? new ErrorLog
+            {
+                ProjectRoot = effectiveProjectRoot,
+                Summary = new ValidationResultSummary()
+            }
+            : null;
 
         var results = new List<(string Path, IReadOnlyList<Core.Diagnostic> Diagnostics)>();
         var summary = new ValidationResultSummary();
-        var outputMode = cmdSettings.Json ? OutputMode.Json : cmdSettings.ShowSummary ? OutputMode.Summary : cmdSettings.Quiet ? OutputMode.Quiet : OutputMode.Default;
+        var outputMode = cmdSettings.Json ? OutputMode.Json :
+            cmdSettings.ShowSummary ? OutputMode.Summary :
+            cmdSettings.Quiet ? OutputMode.Quiet : OutputMode.Default;
 
         foreach (var file in files)
         {
@@ -282,6 +301,7 @@ public sealed class ParseCommand : AsyncCommand<ParseCommandSettings>
                 summary.FilesWithErrors++;
                 summary.TotalErrors += result.ErrorCount;
             }
+
             summary.TotalWarnings += result.WarningCount;
 
             if (errorLog != null)
@@ -291,6 +311,7 @@ public sealed class ParseCommand : AsyncCommand<ParseCommandSettings>
                 {
                     errorLog.Summary.FilesWithErrors++;
                 }
+
                 foreach (var diagnostic in result.Diagnostics)
                 {
                     errorLog.Add(diagnostic, file);
@@ -305,21 +326,22 @@ public sealed class ParseCommand : AsyncCommand<ParseCommandSettings>
 
         processor.SaveCaches();
 
-        if (errorLog != null && !string.IsNullOrEmpty(settings.CachePath))
+        // Output results
+        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        string logPath = Path.Combine(baseDir, "validation-report.log");
+        string jsonLogPath = Path.Combine(baseDir, "validation-report.json");
+
+        if (errorLog != null)
         {
             try
             {
-                Directory.CreateDirectory(settings.CachePath);
-                
-                string logPath = Path.Combine(settings.CachePath, "validation-report.txt");
                 ErrorLogWriter.Write(errorLog, logPath);
                 if (outputMode != OutputMode.Json && outputMode != OutputMode.Quiet)
                 {
                     console.WriteLine();
                     console.MarkupLine($"📋 Validation report written to: [blue]{Markup.Escape(logPath)}[/]");
                 }
-                
-                string jsonLogPath = Path.Combine(settings.CachePath, "validation-report.json");
+
                 ErrorLogWriter.WriteJson(errorLog, jsonLogPath);
                 if (outputMode != OutputMode.Json && outputMode != OutputMode.Quiet)
                 {

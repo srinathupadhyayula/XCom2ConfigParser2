@@ -15,7 +15,7 @@ public sealed class ParserSettings
     public string? CommunityHighlanderPath { get; set; }
     public string? AlienHighlanderPath { get; set; }
     public string AllModsRoot { get; set; } = "../../Mods/";
-    public string CachePath { get; set; } = ".xcom2cache/structs/";
+    public string CachePath { get; set; } = ".xcom2cache";
     public string? SdkRoot { get; set; }
     public bool HasJsonParseError { get; set; }
     public string? JsonParseErrorMessage { get; set; }
@@ -47,8 +47,10 @@ public sealed class SettingsLoader
             using var doc = JsonDocument.Parse(content);
             var root = doc.RootElement;
 
+            // Load from JSON using case-insensitive property matching
+            
             // Load iniRoots
-            if (root.TryGetProperty("xcom.configParser.iniRoots", out var iniRoots))
+            if (TryGetPropertyCaseInsensitive(root, "xcom.configParser.iniRoots", out var iniRoots))
             {
                 settings.IniRoots = new List<string>();
                 foreach (var element in iniRoots.EnumerateArray())
@@ -60,7 +62,7 @@ public sealed class SettingsLoader
             }
 
             // Load localSrcRoot
-            if (root.TryGetProperty("xcom.configParser.localSrcRoot", out var localSrcRoot))
+            if (TryGetPropertyCaseInsensitive(root, "xcom.configParser.localSrcRoot", out var localSrcRoot))
             {
                 string? path = localSrcRoot.GetString();
                 if (!string.IsNullOrEmpty(path))
@@ -68,7 +70,7 @@ public sealed class SettingsLoader
             }
 
             // Load buildScriptPath
-            if (root.TryGetProperty("xcom.configParser.buildScriptPath", out var buildScriptPath))
+            if (TryGetPropertyCaseInsensitive(root, "xcom.configParser.buildScriptPath", out var buildScriptPath))
             {
                 string? path = buildScriptPath.GetString();
                 if (!string.IsNullOrEmpty(path))
@@ -76,7 +78,7 @@ public sealed class SettingsLoader
             }
 
             // Load modsCompiledAgainst (explicit list takes precedence over build.ps1)
-            if (root.TryGetProperty("xcom.configParser.modsCompiledAgainst", out var modsCompiledAgainst))
+            if (TryGetPropertyCaseInsensitive(root, "xcom.configParser.modsCompiledAgainst", out var modsCompiledAgainst))
             {
                 settings.ModsCompiledAgainst = new List<string>();
                 foreach (var element in modsCompiledAgainst.EnumerateArray())
@@ -93,7 +95,7 @@ public sealed class SettingsLoader
             }
 
             // Load communityHighlanderPath
-            if (root.TryGetProperty("xcom.configParser.communityHighlanderPath", out var communityHighlanderPath))
+            if (TryGetPropertyCaseInsensitive(root, "xcom.configParser.communityHighlanderPath", out var communityHighlanderPath))
             {
                 string? path = communityHighlanderPath.GetString();
                 if (!string.IsNullOrEmpty(path))
@@ -101,7 +103,7 @@ public sealed class SettingsLoader
             }
 
             // Load alienHighlanderPath
-            if (root.TryGetProperty("xcom.configParser.alienHighlanderPath", out var alienHighlanderPath))
+            if (TryGetPropertyCaseInsensitive(root, "xcom.configParser.alienHighlanderPath", out var alienHighlanderPath))
             {
                 string? path = alienHighlanderPath.GetString();
                 if (!string.IsNullOrEmpty(path))
@@ -109,7 +111,7 @@ public sealed class SettingsLoader
             }
 
             // Load allModsRoot
-            if (root.TryGetProperty("xcom.configParser.allModsRoot", out var allModsRoot))
+            if (TryGetPropertyCaseInsensitive(root, "xcom.configParser.allModsRoot", out var allModsRoot))
             {
                 string? path = allModsRoot.GetString();
                 if (!string.IsNullOrEmpty(path))
@@ -117,7 +119,7 @@ public sealed class SettingsLoader
             }
 
             // Load cachePath
-            if (root.TryGetProperty("xcom.configParser.cachePath", out var cachePath))
+            if (TryGetPropertyCaseInsensitive(root, "xcom.configParser.cachePath", out var cachePath))
             {
                 string? path = cachePath.GetString();
                 if (!string.IsNullOrEmpty(path))
@@ -125,7 +127,7 @@ public sealed class SettingsLoader
             }
 
             // Load sdkRoot (legacy key)
-            if (root.TryGetProperty("xcom.highlander.sdkroot", out var sdkRoot))
+            if (TryGetPropertyCaseInsensitive(root, "xcom.highlander.sdkroot", out var sdkRoot))
             {
                 string? path = sdkRoot.GetString();
                 if (!string.IsNullOrEmpty(path))
@@ -140,6 +142,27 @@ public sealed class SettingsLoader
         }
 
         return settings;
+    }
+
+    private static bool TryGetPropertyCaseInsensitive(JsonElement element, string propertyName, out JsonElement value)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            value = default;
+            return false;
+        }
+
+        foreach (var prop in element.EnumerateObject())
+        {
+            if (string.Equals(prop.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                value = prop.Value;
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
     }
 
     private string ResolvePath(string path)

@@ -5,14 +5,28 @@ using XCom2ConfigParser2.Validation;
 
 namespace XCom2ConfigParser2.Tests.Validation;
 
-public class SimpleSyntaxValidatorTests
+public class SyntaxValidatorTests
 {
-    private readonly SimpleSyntaxValidator _validator = new();
+    private readonly SyntaxValidator _validator = new();
 
     [Fact]
     public void Validate_ValidSectionHeader_NoErrors()
     {
         var errors = Validate("[Engine.Engine]");
+        errors.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Validate_SectionWithTabs_NoErrors()
+    {
+        var errors = Validate("[Specialist\tX2SoldierClassTemplate]");
+        errors.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Validate_SectionWithMultipleSpaces_NoErrors()
+    {
+        var errors = Validate("[Specialist      X2SoldierClassTemplate]");
         errors.ShouldBeEmpty();
     }
 
@@ -107,6 +121,13 @@ public class SimpleSyntaxValidatorTests
         var error = errors.Where(e => e.Code == ErrorCode.InvalidIdentifier).ShouldHaveSingleItem();
         error.Location.Start.Line.ShouldBe(1);
         error.Location.Start.Column.ShouldBe(1);
+    }
+
+    [Fact]
+    public void Validate_NamedArrayIndex_NoErrors()
+    {
+        var errors = Validate("CharacterBaseStats[eStat_Will]=50");
+        errors.ShouldBeEmpty();
     }
 
     private IReadOnlyList<Diagnostic> Validate(string text)
