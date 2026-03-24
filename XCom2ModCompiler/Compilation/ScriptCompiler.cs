@@ -5,6 +5,10 @@ using XCom2ModCompiler.Utilities;
 
 namespace XCom2ModCompiler.Compilation;
 
+/// <summary>
+/// Provides a high-level interface for invoking the UnrealEd MakeCommandlet to compile XCOM 2 script packages.
+/// This class encapsulates the logic for both base game package compilation and mod-specific source compilation.
+/// </summary>
 public class ScriptCompiler
 {
     private readonly string _commandletPath;
@@ -13,6 +17,14 @@ public class ScriptCompiler
     private readonly ILogger<ScriptCompiler> _logger;
     private readonly IProcessRunner _runner;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ScriptCompiler"/> class.
+    /// </summary>
+    /// <param name="commandletPath">The absolute path to the UnrealEd.exe executable.</param>
+    /// <param name="sdkPath">The root path of the XCOM 2 SDK.</param>
+    /// <param name="gamePath">The root path of the XCOM 2 game installation.</param>
+    /// <param name="runner">The process runner used to execute the commandlet.</param>
+    /// <param name="logger">The logger for diagnostic output.</param>
     public ScriptCompiler(
         string commandletPath,
         string sdkPath,
@@ -27,6 +39,14 @@ public class ScriptCompiler
         _logger = logger;
     }
 
+    /// <summary>
+    /// Performs compilation of the base game packages.
+    /// Optionally performs a final release pass followed by a standard pass to ensure binary consistency.
+    /// </summary>
+    /// <param name="options">The build options governing the compilation (e.g., FinalRelease, Debug).</param>
+    /// <param name="receiver">The output receiver for processing commandlet console output.</param>
+    /// <param name="ct">A cancellation token to abort the compilation.</param>
+    /// <returns>A task representing the asynchronous operation, returning true if compilation succeeded.</returns>
     public virtual async Task<bool> CompileBaseAsync(
         BuildOptions options,
         OutputReceiver receiver,
@@ -53,6 +73,16 @@ public class ScriptCompiler
         return await InvokeCommandlet(args, receiver, "Base Compilation", ct);
     }
 
+    /// <summary>
+    /// Performs compilation for a specific mod project.
+    /// Uses the '-mods' argument to target the project source and output to a staging directory.
+    /// </summary>
+    /// <param name="modName">The name of the mod package to compile.</param>
+    /// <param name="stagingPath">The path where the compiled .u binary should be placed.</param>
+    /// <param name="options">The build options governing the compilation.</param>
+    /// <param name="receiver">The output receiver for processing commandlet console output.</param>
+    /// <param name="ct">A cancellation token to abort the compilation.</param>
+    /// <returns>A task representing the asynchronous operation, returning true if compilation succeeded.</returns>
     public virtual async Task<bool> CompileModAsync(
         string modName,
         string stagingPath,
@@ -74,6 +104,11 @@ public class ScriptCompiler
         return await InvokeCommandlet(args, receiver, $"Mod Compilation ({modName})", ct);
     }
 
+    /// <summary>
+    /// Constructs the CLI arguments for the make commandlet based on build options.
+    /// </summary>
+    /// <param name="options">The build options to translate into arguments.</param>
+    /// <returns>A string containing the formatted commandlet arguments.</returns>
     private string BuildArguments(BuildOptions options)
     {
         var args = new StringBuilder("make -nopause -unattended");
@@ -87,6 +122,15 @@ public class ScriptCompiler
         return args.ToString();
     }
 
+    /// <summary>
+    /// Invokes the underlying process runner to execute the UnrealEd commandlet.
+    /// Includes the necessary sleep intervals at project start and end to ensure file system stability.
+    /// </summary>
+    /// <param name="args">The command line arguments for the commandlet.</param>
+    /// <param name="receiver">The output receiver for logging.</param>
+    /// <param name="description">A human-readable description of the current operation.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>True if the process exited with code 0; otherwise false.</returns>
     private async Task<bool> InvokeCommandlet(string args, OutputReceiver receiver, string description, CancellationToken ct)
     {
         receiver.ProcessDescription = description;
