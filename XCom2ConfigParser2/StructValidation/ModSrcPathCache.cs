@@ -8,15 +8,28 @@ namespace XCom2ConfigParser2.StructValidation;
 /// ClassFileLocator and StructFileLocator for their AllMods fallback search,
 /// avoiding repeated expensive directory enumerations.
 /// </summary>
+/// <summary>
+/// Proactively discovers and caches the set of all UnrealScript source roots within the mods directory hierarchy.
+/// </summary>
+/// <remarks>
+/// A mod subfolder is only recognized as a source root if it contains a <c>Src</c> subdirectory.
+/// This discovery process runs once during application initialization to optimize subsequent file location queries,
+/// avoiding repeated and expensive file system traversals.
+/// </remarks>
 public sealed class ModSrcPathCache
 {
     private readonly List<string> _modSrcRoots;
 
     /// <summary>
-    /// All discovered mod Src roots (excluding already-configured explicit paths).
+    /// Gets the collection of all discovered mod source roots, excluding those already explicitly specified in configuration.
     /// </summary>
     public IReadOnlyList<string> AllModSrcRoots => _modSrcRoots;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ModSrcPathCache"/> class.
+    /// Traverses the <see cref="Configuration.ParserSettings.AllModsRoot"/> to identify valid source packages.
+    /// </summary>
+    /// <param name="settings">The global parser configuration settings.</param>
     public ModSrcPathCache(Configuration.ParserSettings settings)
     {
         _modSrcRoots = new List<string>();

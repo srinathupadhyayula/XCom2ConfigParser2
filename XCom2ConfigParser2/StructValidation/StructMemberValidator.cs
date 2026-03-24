@@ -4,10 +4,13 @@ using XCom2ConfigParser2.Parser;
 namespace XCom2ConfigParser2.StructValidation;
 
 /// <summary>
-/// Validates struct member names against UnrealScript struct definitions.
-/// Uses a two-phase resolution with session-scoped variable caching:
-///   Phase 1: Variable type resolution (VariableTypeResolver → VariableCache)
-///   Phase 2: Struct definition resolution (StructDefinitionResolver → StructCache)
+/// Orchestrates the validation of configuration properties against UnrealScript class and struct definitions.
+/// This validator performs a two-phase resolution:
+/// <list type="number">
+/// <item><description><b>Variable Resolution:</b> Maps a configuration property name to its declared type in a specific UnrealScript class.</description></item>
+/// <item><description><b>Struct Resolution:</b> If the property is a struct, resolves its definition to verify that all nested members are valid.</description></item>
+/// </list>
+/// Utilizes session-scoped caching to optimize performance across multiple file passes.
 /// </summary>
 public sealed class StructMemberValidator
 {
@@ -17,6 +20,12 @@ public sealed class StructMemberValidator
     private readonly VariableCache _varCache;
     private readonly bool _enabled;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StructMemberValidator"/> class.
+    /// </summary>
+    /// <param name="settings">The parser settings containing cache and search paths.</param>
+    /// <param name="enabled">Whether validation is active.</param>
+    /// <param name="modSrcCache">Optional cache for mod source file locations.</param>
     public StructMemberValidator(Configuration.ParserSettings settings, bool enabled = true, ModSrcPathCache? modSrcCache = null)
     {
         _cache = new StructCache(settings.CachePath);
@@ -30,14 +39,21 @@ public sealed class StructMemberValidator
         _enabled = enabled;
     }
 
+    /// <summary>
+    /// Persists session-scoped variable resolution results to the disk cache.
+    /// </summary>
     public void SaveCache()
     {
         _varCache.Save();
     }
 
     /// <summary>
-    /// Validates struct members in all KVP directives.
+    /// Validates a list of configuration directives within a specific file context.
     /// </summary>
+    /// <param name="text">The raw text of the configuration file.</param>
+    /// <param name="directives">The list of parsed directives to validate.</param>
+    /// <param name="filePath">The path to the configuration file being validated.</param>
+    /// <returns>A collection of <see cref="Diagnostic"/> objects representing identified errors and warnings.</returns>
     public IReadOnlyList<Diagnostic> Validate(
         string text,
         List<Directive> directives,
@@ -125,6 +141,10 @@ public sealed class StructMemberValidator
         return diagnostics;
     }
 
+    /// <summary>
+    /// Removes array index or parenthetical suffixes from a property name to get the base identifier.
+    /// Example: "MyProperty[0]" -> "MyProperty", "MyProperty(0)" -> "MyProperty"
+    /// </summary>
     private string StripIndexSuffix(string propertyName)
     {
         int bracketPos = propertyName.IndexOf('[');
@@ -143,6 +163,9 @@ public sealed class StructMemberValidator
         return StructParser.TryParse(value.Trim());
     }
 
+    /// <summary>
+    /// Compares members of a struct value literal against the fields defined in the resolved UnrealScript struct.
+    /// </summary>
     private IEnumerable<Diagnostic> ValidateStructMembers(
         CachedStructDef structDef,
         StructValue structValue,
@@ -164,6 +187,9 @@ public sealed class StructMemberValidator
         }
     }
 
+    /// <summary>
+    /// Creates a diagnostic for an unrecognized struct member.
+    /// </summary>
     private Diagnostic CreateInvalidStructMemberError(
         string invalidMember,
         CachedStructDef structDef,
@@ -185,6 +211,9 @@ public sealed class StructMemberValidator
             DiagnosticSeverity.Error);
     }
 
+    /// <summary>
+    /// Creates a warning diagnostic when a struct definition cannot be found in the script source.
+    /// </summary>
     private Diagnostic CreateStructDefNotFoundWarning(
         string sectionName,
         string propertyName,
@@ -215,6 +244,9 @@ public sealed class StructMemberValidator
             DiagnosticSeverity.Warning);
     }
 
+    /// <summary>
+    /// Creates an error diagnostic for using array operations (+, -, ., !) on non-array properties.
+    /// </summary>
     private Diagnostic CreateArrayPrefixOnNonArrayError(
         KvpOperation operation,
         string propertyName,
@@ -245,6 +277,9 @@ public sealed class StructMemberValidator
             DiagnosticSeverity.Error);
     }
 
+    /// <summary>
+    /// Factory method for creating detailed <see cref="Diagnostic"/> objects with line and column information.
+    /// </summary>
     private Diagnostic CreateDiagnostic(
         ErrorCode code,
         string message,
@@ -282,6 +317,9 @@ public sealed class StructMemberValidator
             severity);
     }
 
+    /// <summary>
+    /// Extracts the full text of the source line containing the specified character position.
+    /// </summary>
     private string GetSourceLine(string text, int position)
     {
         int start = position;

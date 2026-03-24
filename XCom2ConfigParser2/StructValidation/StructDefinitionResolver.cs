@@ -1,14 +1,24 @@
 namespace XCom2ConfigParser2.StructValidation;
 
 /// <summary>
-/// Result of struct definition resolution.
+/// Encapsulates the outcome of a struct resolution attempt. 
+/// Provides access to the successfully resolved definition or detailed failure information for diagnostics.
 /// </summary>
 public sealed class StructResolutionResult
 {
+    /// <summary>Gets a value indicating whether the struct was successfully found and parsed.</summary>
     public bool Found { get; }
+
+    /// <summary>Gets the resolved struct definition if <see cref="Found"/> is true.</summary>
     public CachedStructDef? StructDef { get; }
+
+    /// <summary>Gets a description of where the struct was resolved from (e.g., "Cache", "Mod Source", "SDK").</summary>
     public string ResolutionSource { get; }
+
+    /// <summary>Gets an optional error message if resolution failed due to an exception or circular reference.</summary>
     public string? ErrorMessage { get; }
+
+    /// <summary>Gets the list of file paths that were searched before concluding resolution failed.</summary>
     public IReadOnlyList<string> SearchedPaths { get; }
 
     private StructResolutionResult(bool found, CachedStructDef? structDef, string resolutionSource, string? errorMessage, IReadOnlyList<string> searchedPaths)
@@ -20,19 +30,23 @@ public sealed class StructResolutionResult
         SearchedPaths = searchedPaths;
     }
 
+    /// <summary>Creates a successful resolution result.</summary>
     public static StructResolutionResult Success(CachedStructDef def, string source) =>
         new(true, def, source, null, Array.Empty<string>());
 
+    /// <summary>Creates a result indicating the struct could not be located in any searched paths.</summary>
     public static StructResolutionResult NotFound(IReadOnlyList<string> searchedPaths) =>
         new(false, null, "", null, searchedPaths);
 
+    /// <summary>Creates a result representing an error during the resolution process.</summary>
     public static StructResolutionResult Error(string message) =>
         new(false, null, "", message, Array.Empty<string>());
 }
 
 /// <summary>
-/// Finds and resolves struct definitions with caching and recursive nested struct resolution.
-/// Delegates all .uc file parsing to <see cref="UnrealScriptParser"/>.
+/// Provides logic for locating, parsing, and caching UnrealScript struct definitions.
+/// Handles recursive resolution of nested structs and utilizes both positive and negative caching 
+/// to optimize repetitive lookups during configuration validation.
 /// </summary>
 public sealed class StructDefinitionResolver
 {
@@ -41,12 +55,24 @@ public sealed class StructDefinitionResolver
     private readonly HashSet<string> _resolving = new();  // Cycle detection
     private const int MaxRecursionDepth = 10;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StructDefinitionResolver"/> class.
+    /// </summary>
+    /// <param name="settings">The global parser settings.</param>
+    /// <param name="cache"> пре-existing struct cache to use for lookups and persistence.</param>
+    /// <param name="modSrcCache">Optional cache for mod source file locations.</param>
     public StructDefinitionResolver(Configuration.ParserSettings settings, StructCache cache, ModSrcPathCache? modSrcCache = null)
     {
         _cache = cache;
         _locator = new StructFileLocator(settings, modSrcCache);
     }
 
+    /// <summary>
+    /// Resolves a struct definition by name. Checks the cache first, then searches the file system if necessary.
+    /// </summary>
+    /// <param name="structName">The case-insensitive name of the struct to find.</param>
+    /// <param name="depth">Current recursion depth for nested struct resolution.</param>
+    /// <returns>A <see cref="StructResolutionResult"/> containing the outcome of the search.</returns>
     public StructResolutionResult Resolve(string structName, int depth = 0)
     {
         // Check positive cache first
@@ -122,6 +148,9 @@ public sealed class StructDefinitionResolver
         }
     }
 
+    /// <summary>
+    /// Computes a SHA256 hash of the specified file to detect changes and invalidate cache entries.
+    /// </summary>
     private static string ComputeHash(string filePath)
     {
         using var sha256 = System.Security.Cryptography.SHA256.Create();

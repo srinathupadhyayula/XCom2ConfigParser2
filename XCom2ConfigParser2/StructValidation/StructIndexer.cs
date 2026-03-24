@@ -1,21 +1,25 @@
 namespace XCom2ConfigParser2.StructValidation;
 
 /// <summary>
-/// Scans all configured source directories upfront and populates the StructCache.
-/// This is the "pre-indexing" phase — run at startup (or via --force-reindex)
-/// to ensure the cache is warm before per-file validation begins.
-///
-/// After indexing, on-demand searches via StructFileLocator serve as a safety
-/// net only (for newly added files since last index, etc.).
-///
-/// Files are processed in parallel (via Parallel.ForEachAsync) to reduce startup time.
+/// Scans configured UnrealScript source directories to pre-populate the <see cref="StructCache"/>.
+/// This indexing phase is typically run at application startup to ensure that subsequent configuration 
+/// validation can perform fast, cache-only lookups for struct definitions.
 /// </summary>
+/// <remarks>
+/// Parallel processing is used for file-system enumeration and content parsing to maximize throughput.
+/// </remarks>
 public sealed class StructIndexer
 {
     private readonly Configuration.ParserSettings _settings;
     private readonly StructCache _cache;
     private readonly ModSrcPathCache _modSrcCache;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StructIndexer"/> class.
+    /// </summary>
+    /// <param name="settings">The global parser settings.</param>
+    /// <param name="cache">The struct cache to be populated.</param>
+    /// <param name="modSrcCache">The cache containing mod source directory mappings.</param>
     public StructIndexer(Configuration.ParserSettings settings, StructCache cache, ModSrcPathCache modSrcCache)
     {
         _settings = settings;
@@ -24,10 +28,11 @@ public sealed class StructIndexer
     }
 
     /// <summary>
-    /// Indexes all structs found across all configured source paths in parallel.
-    /// Skips files whose cached entries are still valid (hash unchanged).
-    /// Reports progress and silently continues on per-file/per-dir errors.
+    /// Recursively scans all search roots for .uc files and indexes any struct definitions found.
+    /// Utilizes <see cref="Parallel.ForEach"/> to process files concurrently.
     /// </summary>
+    /// <param name="progress">Optional provider for tracking indexing progress.</param>
+    /// <returns>An <see cref="IndexingResult"/> summarizing the scan results.</returns>
     public IndexingResult IndexAll(IProgress<IndexingProgress>? progress = null)
     {
         var roots = BuildSearchRoots();
@@ -104,6 +109,9 @@ public sealed class StructIndexer
         return new IndexingResult(filesScanned, structsFound, 0, allErrors.ToList());
     }
 
+    /// <summary>
+    /// Aggregates all potential UnrealScript source roots specified in the configuration.
+    /// </summary>
     private List<(string Dir, string Label)> BuildSearchRoots()
     {
         var roots = new List<(string, string)>();
@@ -132,6 +140,10 @@ public sealed class StructIndexer
         return roots;
     }
 
+    /// <summary>
+    /// Efficiently enumerates .uc files in a directory tree without loading the entire list into memory.
+    /// Handles IO errors and unauthorized access by logging them to the error collection instead of failing.
+    /// </summary>
     private static IEnumerable<string> EnumerateUcFiles(string rootDir, System.Collections.Concurrent.ConcurrentBag<string> errors)
     {
         var stack = new Stack<string>();
@@ -171,6 +183,9 @@ public sealed class StructIndexer
         }
     }
 
+    /// <summary>
+    /// Computes a SHA256 hash of the specified file for cache validation.
+    /// </summary>
     private static string ComputeHash(string filePath)
     {
         using var sha256 = System.Security.Cryptography.SHA256.Create();
@@ -180,10 +195,15 @@ public sealed class StructIndexer
     }
 }
 
-/// <summary>Progress report item for StructIndexer.</summary>
+/// <summary>
+/// Represents a progress update during an indexing operation.
+/// </summary>
 public readonly struct IndexingProgress
 {
+    /// <summary>Gets the total number of files processed so far.</summary>
     public int FilesProcessed { get; }
+    
+    /// <summary>Gets the path of the file currently being processed.</summary>
     public string CurrentFile { get; }
 
     public IndexingProgress(int filesProcessed, string currentFile)
@@ -193,12 +213,21 @@ public readonly struct IndexingProgress
     }
 }
 
-/// <summary>Summary result of an indexing run.</summary>
+/// <summary>
+/// Encapsulates the final results and statistics of an indexing run.
+/// </summary>
 public sealed class IndexingResult
 {
+    /// <summary>Gets the total number of files successfully scanned.</summary>
     public int FilesScanned { get; }
+    
+    /// <summary>Gets the total number of individual struct definitions discovered.</summary>
     public int StructsFound { get; }
+
+    /// <summary>Gets the number of files skipped (e.g., due to valid cache entries).</summary>
     public int FilesSkipped { get; }
+
+    /// <summary>Gets a list of non-fatal errors encountered during the scan.</summary>
     public IReadOnlyList<string> Errors { get; }
 
     public IndexingResult(int filesScanned, int structsFound, int filesSkipped, IReadOnlyList<string> errors)

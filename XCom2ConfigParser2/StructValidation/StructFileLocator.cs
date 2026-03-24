@@ -1,30 +1,27 @@
 namespace XCom2ConfigParser2.StructValidation;
 
 /// <summary>
-/// Locates .uc files containing struct definitions across all configured source paths.
-///
-/// Key improvements over the previous version:
-/// - Per-folder and per-file exception handling — one inaccessible folder
-///   does NOT abort the rest of the search.
-/// - Package-aware search: when packageName is known, limits search to
-///   {root}/{packageName}/Classes/ only, skipping unrelated packages.
-/// - Uses ModSrcPathCache for AllMods fallback — mod Src dirs are discovered once.
-/// - Delegates all file reading to UnrealScriptParser (encoding-resilient).
-/// - Uses streaming line-based check (FileContainsStruct) instead of ReadAllText.
-///
-/// Search order (same as ClassFileLocator):
-///   1. Local Src
-///   2. Mods Compiled Against
-///   3. SDK SrcOrig
-///   4. Community Highlander
-///   5. Alien Highlander
-///   6. All Mods (via ModSrcPathCache)
+/// Provides high-level logic for locating the specific UnrealScript (.uc) file that contains a given struct definition.
+/// Searches through the configured codebase hierarchy, including local source, mod dependencies, and the base SDK.
 /// </summary>
+/// <remarks>
+/// This locator is designed to be resilient and efficient:
+/// <list type="bullet">
+/// <item><description><b>Fault Tolerance:</b> Utilizes per-directory exception handling to ensure that inaccessible folders do not abort the entire search process.</description></item>
+/// <item><description><b>Package Awareness:</b> Can limit search scope to a specific package directory if the package name is known.</description></item>
+/// <item><description><b>Performance:</b> Uses streaming line-based checks via <see cref="UnrealScriptParser.FileContainsStruct"/> to avoid reading entire file contents into memory.</description></item>
+/// </list>
+/// </remarks>
 public sealed class StructFileLocator
 {
     private readonly Configuration.ParserSettings _settings;
     private readonly ModSrcPathCache? _modSrcCache;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StructFileLocator"/> class.
+    /// </summary>
+    /// <param name="settings">The global parser settings.</param>
+    /// <param name="modSrcCache">Optional cache for discovered mod source roots.</param>
     public StructFileLocator(Configuration.ParserSettings settings, ModSrcPathCache? modSrcCache = null)
     {
         _settings = settings;
@@ -32,13 +29,11 @@ public sealed class StructFileLocator
     }
 
     /// <summary>
-    /// Locates a .uc file containing a definition for the given struct.
+    /// Searches for a .uc file containing the specified struct definition across all configured paths.
     /// </summary>
-    /// <param name="structName">The struct name to find.</param>
-    /// <param name="knownPackageName">
-    /// Optional. When the package the struct belongs to is already known,
-    /// the search can be limited to that package's directory only.
-    /// </param>
+    /// <param name="structName">The case-insensitive name of the struct to find.</param>
+    /// <param name="knownPackageName">Optional. The name of the package the struct is expected to reside in, used to optimize the search.</param>
+    /// <returns>A <see cref="ClassFileResult"/> containing the path to the file if found, or the list of searched paths if missing.</returns>
     public ClassFileResult Locate(string structName, string? knownPackageName = null)
     {
         var searched = new List<string>();
@@ -117,14 +112,9 @@ public sealed class StructFileLocator
         return ClassFileResult.NotFound(searched);
     }
 
-    // -------------------------------------------------------------------------
-    // Search helpers
-    // -------------------------------------------------------------------------
-
     /// <summary>
-    /// Recursively searches a root directory for a .uc file containing the struct.
-    /// Handles UnauthorizedAccessException and IOException PER DIRECTORY/FILE,
-    /// so one inaccessible location does not abort the rest of the search.
+    /// Recursively searches a directory tree for a .uc file containing the target struct.
+    /// Employs a stack-based traversal to allow per-directory error handling and avoid stack overflows on deep trees.
     /// </summary>
     private static ClassFileResult? SearchDirectoryRecursive(
         string rootDir,
@@ -182,7 +172,7 @@ public sealed class StructFileLocator
     }
 
     /// <summary>
-    /// Searches a single directory (non-recursive) for a .uc file containing the struct.
+    /// Performs a non-recursive search within a single directory for a file containing the struct definition.
     /// </summary>
     private static ClassFileResult? SearchSingleDirectory(
         string dir,
@@ -217,6 +207,9 @@ public sealed class StructFileLocator
         return null;
     }
 
+    /// <summary>
+    /// Normalizes a directory path for consistent comparison in the search history.
+    /// </summary>
     private static string NormalizePath(string path) =>
         Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 }

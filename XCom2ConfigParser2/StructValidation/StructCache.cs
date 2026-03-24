@@ -9,6 +9,14 @@ namespace XCom2ConfigParser2.StructValidation;
 /// Negative entries are cleared at startup to prevent stale false-negatives
 /// from persisting after logic fixes.
 /// </summary>
+/// <summary>
+/// Manages a persistent disk-based cache for resolved UnrealScript struct definitions.
+/// Optimizes repeated validation runs by storing parsed metadata and tracking source file integrity via hashing.
+/// </summary>
+/// <remarks>
+/// The cache supports both positive entries (found structs) and negative entries (explicitly missing structs) 
+/// to prevent redundant exhaustive searches across the entire source hierarchy.
+/// </remarks>
 public sealed class StructCache
 {
     private readonly string _cacheDir;
@@ -16,6 +24,10 @@ public sealed class StructCache
 
     private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StructCache"/> class.
+    /// </summary>
+    /// <param name="cacheRootDir">The root directory where the cache should be stored.</param>
     public StructCache(string cacheRootDir)
     {
         _cacheDir = Path.Combine(cacheRootDir, "structsmap");
@@ -23,10 +35,12 @@ public sealed class StructCache
     }
 
     /// <summary>
-    /// Tries to get a cached struct definition.
-    /// Returns false if cache is missing, expired, or source file has changed.
-    /// Will NOT return negative-cache entries — use <see cref="IsKnownNotFound"/> for those.
+    /// Attempts to retrieve a cached struct definition by name.
+    /// Validates that the cache entry has not expired and that the original source file has not changed.
     /// </summary>
+    /// <param name="structName">The case-insensitive name of the struct.</param>
+    /// <param name="cached">When this method returns, contains the cached definition if successful; otherwise, <c>null</c>.</param>
+    /// <returns><c>true</c> if a valid cache entry was found; otherwise, <c>false</c>.</returns>
     public bool TryGet(string structName, out CachedStructDef? cached)
     {
         string cacheFile = GetCachePath(structName);
@@ -79,9 +93,10 @@ public sealed class StructCache
     }
 
     /// <summary>
-    /// Returns true if a negative cache entry exists for this struct name,
-    /// meaning we have already searched for it and confirmed it cannot be found.
+    /// Determines if a negative cache entry exists for the specified struct name.
     /// </summary>
+    /// <param name="structName">The name of the struct to check.</param>
+    /// <returns><c>true</c> if the struct was previously confirmed as not found; otherwise, <c>false</c>.</returns>
     public bool IsKnownNotFound(string structName)
     {
         string cacheFile = GetCachePath(structName);
@@ -100,8 +115,9 @@ public sealed class StructCache
     }
 
     /// <summary>
-    /// Saves a successfully resolved struct definition to disk.
+    /// Persists a successfully resolved struct definition to the cache.
     /// </summary>
+    /// <param name="def">The struct definition to cache.</param>
     public void Save(CachedStructDef def)
     {
         string cacheFile = GetCachePath(def.StructName);
@@ -109,9 +125,9 @@ public sealed class StructCache
     }
 
     /// <summary>
-    /// Saves a negative cache sentinel for a struct that could not be found.
-    /// This prevents repeated exhaustive searches for the same struct name.
+    /// Records a negative cache entry for a struct that could not be located.
     /// </summary>
+    /// <param name="structName">The name of the missing struct.</param>
     public void SaveNotFound(string structName)
     {
         var sentinel = new CachedStructDef
@@ -125,9 +141,8 @@ public sealed class StructCache
     }
 
     /// <summary>
-    /// Removes all negative cache entries from disk.
-    /// Should be called at startup so that stale "not found" entries from
-    /// previous (possibly buggy) runs do not affect the current session.
+    /// Purges all negative cache (not found) entries.
+    /// Typically called at startup to allow retrying failed lookups after codebase updates or logic fixes.
     /// </summary>
     public void ClearNegativeEntries()
     {
@@ -150,8 +165,7 @@ public sealed class StructCache
     }
 
     /// <summary>
-    /// Clears ALL cached struct definitions (positive and negative).
-    /// Called when --force-reindex is specified.
+    /// Completely clears the struct cache.
     /// </summary>
     public void Clear()
     {
@@ -165,6 +179,9 @@ public sealed class StructCache
         }
     }
 
+    /// <summary>
+    /// Gets the file system path for a cache entry based on the struct name.
+    /// </summary>
     public string GetCachePath(string structName) =>
         Path.Combine(_cacheDir, $"{structName}.json");
 

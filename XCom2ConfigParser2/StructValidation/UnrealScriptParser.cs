@@ -4,12 +4,13 @@ using System.Text.RegularExpressions;
 namespace XCom2ConfigParser2.StructValidation;
 
 /// <summary>
-/// Canonical, unified parser for UnrealScript (.uc) files.
-/// Provides source-of-truth regex patterns and helpers for extracting
-/// config variable declarations and struct definitions from .uc source.
-/// All other parsers (VariableTypeResolver, StructDefinitionResolver, UcFileParser)
-/// delegate to this class.
+/// Provides a canonical, high-performance parser for UnrealScript (.uc) source files.
+/// Centrally manages regex patterns and parsing logic for class headers, variable declarations, and struct definitions.
 /// </summary>
+/// <remarks>
+/// This parser is designed to be encoding-resilient (supporting both UTF-8 and Windows-1252) and performance-focused 
+/// (utilizing early-exit strategies and targeted section scanning).
+/// </remarks>
 public static class UnrealScriptParser
 {
     // -------------------------------------------------------------------------
@@ -17,8 +18,8 @@ public static class UnrealScriptParser
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Set of known UnrealScript primitive (non-struct) type names.
-    /// Types NOT in this set are treated as potential struct types.
+    /// A set of known UnrealScript primitive and built-in math types.
+    /// Used during validation to distinguish between simple literals and complex struct-backed properties.
     /// </summary>
     public static readonly HashSet<string> KnownPrimitives = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -115,9 +116,10 @@ public static class UnrealScriptParser
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Parses the class name and parent class name from the file header.
-    /// returns null if the header cannot be found or parsed.
+    /// Parses the class header (ClassName and ParentClass) from the specified file.
     /// </summary>
+    /// <param name="filePath">The absolute path to the .uc file.</param>
+    /// <returns>A <see cref="ClassHeader"/> if successful; otherwise, <c>null</c>.</returns>
     public static ClassHeader? ParseClassHeader(string filePath)
     {
         string? content = TryReadFile(filePath);
@@ -134,10 +136,10 @@ public static class UnrealScriptParser
     }
 
     /// <summary>
-    /// Reads a .uc file, extracts only the variable declaration section (up to
-    /// the first function definition), and returns all 'var config' declarations.
-    /// Returns null if the file cannot be read.
+    /// Extracts all variable declarations marked with the <c>config</c> keyword from a .uc file.
     /// </summary>
+    /// <param name="filePath">The absolute path to the .uc file.</param>
+    /// <returns>A list of <see cref="ConfigVarDecl"/> objects, or <c>null</c> if the file remains unreadable.</returns>
     public static List<ConfigVarDecl>? ParseConfigVariables(string filePath)
     {
         string? content = TryReadFile(filePath);
@@ -181,9 +183,10 @@ public static class UnrealScriptParser
     }
 
     /// <summary>
-    /// Parses all struct definitions from a .uc file.
-    /// Returns an empty list on read or parse error (never throws).
+    /// Extracts all struct definitions from the specified .uc file.
     /// </summary>
+    /// <param name="filePath">The absolute path to the .uc file.</param>
+    /// <returns>A list of identified <see cref="StructDef"/> objects.</returns>
     public static List<StructDef> ParseStructs(string filePath)
     {
         string? content = TryReadFile(filePath);
@@ -194,9 +197,10 @@ public static class UnrealScriptParser
     }
 
     /// <summary>
-    /// Parses struct definitions from already-loaded content string.
-    /// Useful when the caller has already read the file.
+    /// Extracts struct definitions from a raw content string.
     /// </summary>
+    /// <param name="content">The raw source text to scan.</param>
+    /// <returns>A list of identified <see cref="StructDef"/> objects.</returns>
     public static List<StructDef> ParseStructsFromContent(string content)
     {
         var results = new List<StructDef>();
@@ -213,11 +217,11 @@ public static class UnrealScriptParser
     }
 
     /// <summary>
-    /// Finds a single named struct definition in a .uc file.
-    /// Returns null if not found or file unreadable.
-    /// Uses early-exit line-by-line reading to avoid reading the full file
-    /// when the struct is near the top.
+    /// Searches for a specific struct definition by name in the given file.
     /// </summary>
+    /// <param name="filePath">The absolute path to the .uc file.</param>
+    /// <param name="structName">The case-insensitive name of the struct.</param>
+    /// <returns>A <see cref="StructDef"/> if found; otherwise, <c>null</c>.</returns>
     public static StructDef? FindStruct(string filePath, string structName)
     {
         string? content = TryReadFile(filePath);
@@ -242,11 +246,11 @@ public static class UnrealScriptParser
     }
 
     /// <summary>
-    /// Checks whether a file contains a struct definition with a given name,
-    /// without parsing the full body. Uses <see cref="File.ReadLines"/> for
-    /// streaming read — exits as soon as the match is found.
-    /// Returns false on any read/permission error.
+    /// Performs a lightweight scan to determine if a file contains a specific struct definition.
     /// </summary>
+    /// <param name="filePath">The absolute path to the .uc file.</param>
+    /// <param name="structName">The case-insensitive name of the struct.</param>
+    /// <returns><c>true</c> if the struct declaration is found; otherwise, <c>false</c>.</returns>
     public static bool FileContainsStruct(string filePath, string structName)
     {
         // Pre-compile a lightweight pattern — match struct declaration with optional opening brace
@@ -274,10 +278,10 @@ public static class UnrealScriptParser
     }
 
     /// <summary>
-    /// Returns the portion of source content before the first function definition.
-    /// This limits regex scanning to the variable declaration section only,
-    /// preventing false matches inside function bodies.
+    /// Truncates source content at the first function definition to isolate variable declarations.
     /// </summary>
+    /// <param name="content">The full source content of the .uc file.</param>
+    /// <returns>The portion of the content containing only variable declarations, or the full content if no function is found.</returns>
     public static string GetDeclarationSection(string content)
     {
         var m = FunctionStartRegex.Match(content);
@@ -285,10 +289,10 @@ public static class UnrealScriptParser
     }
 
     /// <summary>
-    /// Attempts to read a file as UTF-8. If that throws a decoding error,
-    /// falls back to Windows-1252 (common encoding for older UE3 source files).
-    /// Returns null on IO error (file not found, permission denied, etc.).
+    /// Buffers the specified file into memory, attempting UTF-8 before falling back to Windows-1252.
     /// </summary>
+    /// <param name="filePath">The path to the file to read.</param>
+    /// <returns>The file content as a string, or <c>null</c> if reading fails.</returns>
     public static string? TryReadFile(string filePath)
     {
         try
@@ -303,6 +307,8 @@ public static class UnrealScriptParser
             // Try UTF-8
             try
             {
+                // Note: Standard UTF8.GetString will not throw on invalid sequences unless a custom decoder is used.
+                // However, we can check for common invalid patterns if we wanted to be stricter.
                 return Encoding.UTF8.GetString(bytes, start, bytes.Length - start);
             }
             catch (DecoderFallbackException)

@@ -1,18 +1,32 @@
 namespace XCom2ConfigParser2.StructValidation;
 
 /// <summary>
-/// Finds config variable declarations in class files and extracts their types.
-/// Delegates all parsing to <see cref="UnrealScriptParser"/>.
+/// Resolves configuration property names to their corresponding UnrealScript variable declarations.
+/// This resolver crawls the class inheritance hierarchy to find the original 'config' or 'globalconfig' 
+/// variable definition, enabling type-safe validation of configuration values.
 /// </summary>
 public sealed class VariableTypeResolver
 {
     private readonly ClassFileLocator _locator;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="VariableTypeResolver"/> class.
+    /// </summary>
+    /// <param name="settings">The global parser settings.</param>
+    /// <param name="modSrcCache">Optional cache for mod source file locations.</param>
     public VariableTypeResolver(Configuration.ParserSettings settings, ModSrcPathCache? modSrcCache = null)
     {
         _locator = new ClassFileLocator(settings, modSrcCache);
     }
 
+    /// <summary>
+    /// Attempts to resolve the type of a property within a specific configuration section.
+    /// Traverses up the inheritance chain (e.g., XComGameState_Unit -> XComGameState_BaseObject -> Object)
+    /// until a matching variable declaration is found or the search limit is reached.
+    /// </summary>
+    /// <param name="sectionName">The raw section header name (e.g., "XComGame.X2Ability_Grenadier").</param>
+    /// <param name="propertyName">The name of the property to resolve.</param>
+    /// <returns>A <see cref="VariableTypeResolutionResult"/> containing the resolution status and type information.</returns>
     public VariableTypeResolutionResult Resolve(string sectionName, string propertyName)
     {
         // Parse section header: [PackageName.ClassName] or [ObjectName ClassName]
@@ -24,7 +38,7 @@ public sealed class VariableTypeResolver
         bool currentlyTargeted = isPackageTargeted;
         var allSearched = new List<string>();
 
-        // Follow inheritance up to 10 levels deep
+        // Follow inheritance up to 10 levels deep to prevent infinite loops in malformed script
         for (int depth = 0; depth < 10; depth++)
         {
             // Locate current class
@@ -42,7 +56,7 @@ public sealed class VariableTypeResolver
             if (!classResult.Found)
                 break;
 
-            // Parse variables in this file
+            // Parse variables in this file using the unified parser
             var vars = UnrealScriptParser.ParseConfigVariables(classResult.FilePath!);
             if (vars != null)
             {
@@ -56,7 +70,7 @@ public sealed class VariableTypeResolver
                 }
             }
 
-            // Crawl up to parent class
+            // Crawl up to parent class by parsing the 'extends' clause
             var header = UnrealScriptParser.ParseClassHeader(classResult.FilePath!);
             if (header == null || string.IsNullOrEmpty(header.ParentName) ||
                 string.Equals(header.ParentName, "Object", StringComparison.OrdinalIgnoreCase) ||
@@ -74,6 +88,10 @@ public sealed class VariableTypeResolver
         return VariableTypeResolutionResult.NotFound(allSearched);
     }
 
+    /// <summary>
+    /// Parses an XCOM 2 configuration section header into its constituent package and class names.
+    /// Supports standard formats like [Package.Class] and [Object Class].
+    /// </summary>
     private static bool TryParseSectionName(string sectionName, out string packageName, out string className, out bool isPackageTargeted)
     {
         packageName = "";

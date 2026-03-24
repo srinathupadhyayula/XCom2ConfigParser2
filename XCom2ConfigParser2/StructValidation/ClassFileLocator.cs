@@ -11,17 +11,42 @@ namespace XCom2ConfigParser2.StructValidation;
 ///   5. SDK SrcOrig
 ///   6. All Mods (via ModSrcPathCache, package-targeted)
 /// </summary>
+/// <summary>
+/// Provides high-level logic for locating UnrealScript class source files (.uc) across the project hierarchy.
+/// </summary>
+/// <remarks>
+/// Searches are performed in a specific priority order:
+/// <list type="number">
+/// <item><description>Local Source Root</description></item>
+/// <item><description>Explicitly configured Mod Dependencies</description></item>
+/// <item><description>Community Highlander Source</description></item>
+/// <item><description>Alien Highlander Source</description></item>
+/// <item><description>Base SDK Source (SrcOrig)</description></item>
+/// <item><description>Global Mod Search (via <see cref="ModSrcPathCache"/>)</description></item>
+/// </list>
+/// </remarks>
 public sealed class ClassFileLocator
 {
     private readonly Configuration.ParserSettings _settings;
     private readonly ModSrcPathCache? _modSrcCache;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ClassFileLocator"/> class.
+    /// </summary>
+    /// <param name="settings">The global parser configuration settings.</param>
+    /// <param name="modSrcCache">Optional cache of discovered mod source roots.</param>
     public ClassFileLocator(Configuration.ParserSettings settings, ModSrcPathCache? modSrcCache = null)
     {
         _settings = settings;
         _modSrcCache = modSrcCache;
     }
 
+    /// <summary>
+    /// Searches for the .uc file corresponding to the specified package and class name.
+    /// </summary>
+    /// <param name="packageName">The name of the package (e.g., "XComGame").</param>
+    /// <param name="className">The name of the class (e.g., "X2Ability_Grenadier").</param>
+    /// <returns>A <see cref="ClassFileResult"/> containing the discovered file path or a log of searched locations.</returns>
     public ClassFileResult Locate(string packageName, string className)
     {
         var searched = new List<string>();
