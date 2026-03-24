@@ -8,15 +8,29 @@ using Kokuban;
 
 namespace XCom2ModCompiler.Utilities;
 
+/// <summary>
+/// Synchronizes an XCOM 2 project file (.x2proj) with the actual files and folders present on the disk.
+/// This utility ensures that the project structure in the IDE matches the physical directory structure,
+/// which is critical for consistent builds and source control management.
+/// </summary>
 public class ProjectSynchronizer
 {
     private readonly ILogger<ProjectSynchronizer> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ProjectSynchronizer"/> class.
+    /// </summary>
+    /// <param name="logger">The logger for synchronization diagnostics.</param>
     public ProjectSynchronizer(ILogger<ProjectSynchronizer> logger)
     {
         _logger = logger;
     }
 
+    /// <summary>
+    /// Regenerates the 'ItemGroup' sections of the specified .x2proj file based on a recursive disk scan.
+    /// Automatically excludes internal build artifacts, script folders, and version control directories.
+    /// </summary>
+    /// <param name="x2projPath">The absolute path to the .x2proj file to synchronize.</param>
     public virtual void Synchronize(string x2projPath)
     {
         if (!File.Exists(x2projPath))

@@ -14,6 +14,11 @@ public class IniHandler
     private string? _targetFile;
     public string? TargetIniPath => _targetFile;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="IniHandler"/> class.
+    /// </summary>
+    /// <param name="projectRoot">The absolute path to the mod project root.</param>
+    /// <param name="iniRoots">A collection of directory paths to scan for XComEngine.ini files.</param>
     public IniHandler(string projectRoot, IEnumerable<string> iniRoots)
     {
         _projectRoot = projectRoot;
@@ -77,6 +82,14 @@ public class IniHandler
         return false;
     }
 
+    /// <summary>
+    /// Prepares the INI content for the staging phase by removing the two-pass trigger section
+    /// and ensuring the main mod and its dependencies are correctly seated in the editor engine settings.
+    /// </summary>
+    /// <param name="originalContent">The raw content of the source INI.</param>
+    /// <param name="mainModName">The canonical name of the main mod.</param>
+    /// <param name="dependantPackages">An optional list of dependent mod packages.</param>
+    /// <returns>The modified INI content string.</returns>
     public string PrepareStagedIni(string originalContent, string mainModName, List<string>? dependantPackages = null)
     {
         var lines = originalContent.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None).ToList();
@@ -102,16 +115,25 @@ public class IniHandler
         return string.Join(Environment.NewLine, lines);
     }
 
+    /// <summary>
+    /// Alias for <see cref="PrepareModCompilationIni"/> used during Phase 1 of a two-pass build.
+    /// </summary>
     public string PreparePass1Ini(string originalContent, string mainModName, List<string> dependantPackages)
     {
         return PrepareModCompilationIni(originalContent, mainModName, dependantPackages);
     }
 
+    /// <summary>
+    /// Alias for <see cref="PrepareModCompilationIni"/> used during Phase 2 of a two-pass build.
+    /// </summary>
     public string PreparePass2Ini(string originalContent, string mainModName, List<string> dependantPackages)
     {
         return PrepareModCompilationIni(originalContent, mainModName, dependantPackages);
     }
 
+    /// <summary>
+    /// Removes a section from the INI file based on its header.
+    /// </summary>
     private void RemoveSection(List<string> lines, string sectionHeader)
     {
         int sectionStartIndex = -1;
@@ -122,12 +144,14 @@ public class IniHandler
             if (string.Equals(trimmed, sectionHeader, StringComparison.OrdinalIgnoreCase))
             {
                 sectionStartIndex = i;
+                continue; sectionStartIndex = i;
                 continue;
             }
 
-            if (sectionStartIndex != -1 && trimmed.StartsWith("["))
+            if (sectionStartIndex != -1 && (trimmed.StartsWith("[") || i == lines.Count - 1))
             {
                 sectionEndIndex = i;
+                if (i == lines.Count - 1 && !trimmed.StartsWith("[")) sectionEndIndex = lines.Count;
                 break;
             }
         }
@@ -138,6 +162,13 @@ public class IniHandler
         }
     }
 
+    /// <summary>
+    /// Ensures that the specified main mod and its dependencies are correctly ordered within the [UnrealEd.EditorEngine] section.
+    /// This method enforces a specific "Main Mod Last" or "Dependencies after Main Mod" order depending on pass context.
+    /// </summary>
+    /// <param name="lines">The list of INI lines to modify.</param>
+    /// <param name="mainModName">The canonical name of the main mod.</param>
+    /// <param name="dependantPackages">The optional list of dependent mod packages.</param>
     private void EnsurePackagesInEngineSection(List<string> lines, string mainModName, List<string>? dependantPackages = null)
     {
         int engineSectionIndex = FindLastSection(lines, "[UnrealEd.EditorEngine]");
@@ -179,6 +210,9 @@ public class IniHandler
         }
     }
 
+    /// <summary>
+    /// Finds the line index of the last occurrence of the specified section header.
+    /// </summary>
     private int FindLastSection(List<string> lines, string sectionHeader)
     {
         for (int i = lines.Count - 1; i >= 0; i--)
@@ -195,6 +229,9 @@ public class IniHandler
         return -1;
     }
 
+    /// <summary>
+    /// Finds the index of the line where the next section starts, or the end of the file.
+    /// </summary>
     private int FindSectionEnd(List<string> lines, int sectionStartIndex)
     {
         for (int i = sectionStartIndex + 1; i < lines.Count; i++)
@@ -205,6 +242,9 @@ public class IniHandler
         return lines.Count;
     }
 
+    /// <summary>
+    /// Searches for a '+ModEditPackages' or 'ModEditPackages' entry within a section.
+    /// </summary>
     private int FindPackageInSection(List<string> lines, int sectionStartIndex, string packageName)
     {
         for (int i = sectionStartIndex + 1; i < lines.Count; i++)
@@ -228,6 +268,9 @@ public class IniHandler
         return -1;
     }
 
+    /// <summary>
+    /// Removes multiple packages from a section if they exist.
+    /// </summary>
     private void RemovePackagesFromSection(List<string> lines, int sectionStartIndex, List<string> packagesToRemove)
     {
         for (int i = sectionStartIndex + 1; i < lines.Count; i++)
@@ -255,6 +298,9 @@ public class IniHandler
         }
     }
 
+    /// <summary>
+    /// Appends a list of packages to the end of the last [UnrealEd.EditorEngine] section.
+    /// </summary>
     private void AppendPackagesToLastEngineSection(List<string> lines, List<string> packages)
     {
         int lastEngineSectionIndex = FindLastSection(lines, "[UnrealEd.EditorEngine]");
@@ -302,5 +348,10 @@ public class IniHandler
         return packages;
     }
 
+    /// <summary>
+    /// Determines if a two-pass compilation flow is required based on the presence of dependent packages.
+    /// </summary>
+    /// <param name="content">The INI content to analyze.</param>
+    /// <returns>True if a two-pass build is necessary; otherwise false.</returns>
     public bool IsTwoPassNeeded(string content) => GetDependantPackages(content).Any();
 }

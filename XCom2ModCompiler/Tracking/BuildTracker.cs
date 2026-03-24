@@ -5,12 +5,22 @@ using XCom2ModCompiler.Utilities;
 
 namespace XCom2ModCompiler.Tracking;
 
+/// <summary>
+/// Tracks the state of the build environment to enable incremental builds.
+/// This class handles saving and loading "fingerprints" (hashes and timestamps)
+/// for core game files and mod sources to detect when a full or selective rebuild is required.
+/// </summary>
 public class BuildTracker
 {
     private readonly string _cachePath;
     private readonly ILogger<BuildTracker> _logger;
     private readonly string _fingerprintFile;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BuildTracker"/> class.
+    /// </summary>
+    /// <param name="cachePath">The directory path where build metadata is stored.</param>
+    /// <param name="logger">The logger for diagnostic output.</param>
     public BuildTracker(string cachePath, ILogger<BuildTracker> logger)
     {
         _cachePath = cachePath;
@@ -18,12 +28,22 @@ public class BuildTracker
         _fingerprintFile = Path.Combine(_cachePath, "lastBuildDetails.json");
     }
 
+    /// <summary>
+    /// Asynchronously loads the build fingerprint from the cache file.
+    /// </summary>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The loaded <see cref="BuildFingerprint"/>, or an empty fingerprint if none exists.</returns>
     public virtual async Task<BuildFingerprint> LoadFingerprintAsync(CancellationToken ct = default)
     {
         var fingerprint = await JsonUtilities.LoadAsync<BuildFingerprint>(_fingerprintFile, ct);
         return fingerprint ?? new BuildFingerprint("", "", DateTime.MinValue, DateTime.MinValue, new Dictionary<string, DateTime>());
     }
 
+    /// <summary>
+    /// Asynchronously saves the provided build fingerprint to the cache file.
+    /// </summary>
+    /// <param name="fingerprint">The fingerprint to save.</param>
+    /// <param name="ct">The cancellation token.</param>
     public virtual async Task SaveFingerprintAsync(BuildFingerprint fingerprint, CancellationToken ct = default)
     {
         await JsonUtilities.SaveAsync(_fingerprintFile, fingerprint, ct);
@@ -146,6 +166,11 @@ public class BuildTracker
         }
     }
 
+    /// <summary>
+    /// Computes an MD5 hash of the specified file.
+    /// </summary>
+    /// <param name="filePath">The absolute path to the file.</param>
+    /// <returns>The hexadecimal string representation of the MD5 hash, or an empty string if the file does not exist.</returns>
     public static string ComputeFileHash(string filePath)
     {
         if (!File.Exists(filePath)) return "";
@@ -156,6 +181,14 @@ public class BuildTracker
     }
 }
 
+/// <summary>
+/// Represents a snapshot of the build environment state, used for change detection.
+/// </summary>
+/// <param name="BuildMode">The build configuration (e.g., "debug" or "release").</param>
+/// <param name="GlobalsHash">The MD5 hash of the SDK's Globals.uci file.</param>
+/// <param name="CoreTimestamp">The last modified timestamp of the SDK's Core.u binary.</param>
+/// <param name="LastBuildTime">The UTC time when the build was last executed.</param>
+/// <param name="FileTimestamps">A dictionary mapping source file paths to their last modified timestamps.</param>
 public record BuildFingerprint(
     string BuildMode, 
     string GlobalsHash, 
