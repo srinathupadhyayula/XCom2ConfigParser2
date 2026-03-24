@@ -1,13 +1,17 @@
 namespace XCom2ConfigParser2.Parser;
 
 /// <summary>
-/// Parser for UE3 struct and array syntax.
+/// Provides a high-level API for parsing Unreal Engine 3 (XCOM 2) configuration structure and array syntax.
+/// This parser handles the specialized '(...)' grammar used for complex property values in .ini files.
 /// </summary>
 public static class StructParser
 {
     /// <summary>
-    /// Parses a struct or array value from text starting with '('.
+    /// Parses a struct or array value from text, assuming the content starts with an opening parenthesis '('.
     /// </summary>
+    /// <param name="text">The raw string value to parse.</param>
+    /// <returns>A <see cref="PropValue"/> representing the parsed structure or array.</returns>
+    /// <exception cref="ParseException">Thrown if the text does not conform to the expected grammar.</exception>
     public static PropValue Parse(string text)
     {
         var lexer = new Lexer(text);
@@ -16,8 +20,11 @@ public static class StructParser
     }
 
     /// <summary>
-    /// Tries to parse a struct or array value, returning null if it's not a struct/array.
+    /// Attempts to parse a struct or array value. Returns null if the value does not appear to be a structure
+    /// or if a parsing error occurs.
     /// </summary>
+    /// <param name="text">The raw string value to check and parse.</param>
+    /// <returns>A <see cref="PropValue"/> if parsing was successful; otherwise null.</returns>
     public static PropValue? TryParse(string text)
     {
         string trimmed = text.Trim();
@@ -36,13 +43,17 @@ public static class StructParser
 }
 
 /// <summary>
-/// Internal parser implementation.
+/// Internal recursive descent parser for the UE3 configuration grammar.
 /// </summary>
 file sealed class Parser
 {
     private readonly Lexer _lexer;
     private Token? _peeked;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Parser"/> class.
+    /// </summary>
+    /// <param name="lexer">The lexer providing the token stream.</param>
     public Parser(Lexer lexer)
     {
         _lexer = lexer;
@@ -57,6 +68,10 @@ file sealed class Parser
         return token;
     }
 
+    /// <summary>
+    /// Entry point for the recursive descent process. Parses a single parenthetical value.
+    /// </summary>
+    /// <returns>A parsed <see cref="PropValue"/>.</returns>
     public PropValue Parse()
     {
         if (Next().Type != TokenType.LParen)
@@ -88,6 +103,10 @@ file sealed class Parser
         throw new ParseException("Expected property name or value", _lexer.Position);
     }
 
+    /// <summary>
+    /// Parses a named data structure (struct) starting with a property name.
+    /// Example: (PropertyA=ValueA, PropertyB=ValueB)
+    /// </summary>
     private StructValue ParseStruct(Token nameToken)
     {
         var children = new List<PropAssignment>();
@@ -127,6 +146,10 @@ file sealed class Parser
         return new StructValue(children);
     }
 
+    /// <summary>
+    /// Parses a sequence of comma-separated values (array).
+    /// Example: (Value1, Value2, Value3)
+    /// </summary>
     private ArrayValue ParseArray(Token firstToken)
     {
         var elements = new List<PropValue>();
@@ -169,6 +192,9 @@ file sealed class Parser
         return new ArrayValue(elements);
     }
 
+    /// <summary>
+    /// Parses a generic property value, which could be a terminal value, a nested struct, or a nested array.
+    /// </summary>
     private PropValue ParseValue()
     {
         var token = Next();
@@ -180,6 +206,9 @@ file sealed class Parser
         };
     }
 
+    /// <summary>
+    /// Disambiguates between a struct or an array value by peeking at the next token.
+    /// </summary>
     private PropValue ParseStructOrArray()
     {
         var first = Next();
@@ -197,6 +226,9 @@ file sealed class Parser
         throw new ParseException("Expected key-value pair or array value", _lexer.Position);
     }
 
+    /// <summary>
+    /// Parses an optional array index suffix for property names, such as Property[0].
+    /// </summary>
     private uint? ParseOptionalIndex()
     {
         if (Peek()?.Type != TokenType.LBrack)

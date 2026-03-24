@@ -4,7 +4,8 @@ using XCom2ConfigParser2.Core;
 namespace XCom2ConfigParser2.Parser;
 
 /// <summary>
-/// Tokenizes lines into directives (SectionHeader, KVP, Unknown).
+/// Provides logic for tokenizing raw configuration lines into high-level <see cref="Directive"/> objects.
+/// Handles section headers, key-value pairs, and unrecognized content while respecting multiline continuations.
 /// </summary>
 public static class DirectiveTokenizer
 {
@@ -17,8 +18,11 @@ public static class DirectiveTokenizer
         new(@"^[A-Za-z][A-Za-z0-9_]*(?:\[(?:0|[1-9][0-9]*)\]|\((?:0|[1-9][0-9]*)\))?$");
 
     /// <summary>
-    /// Tokenizes merged lines into directives.
+    /// Tokenizes a collection of merged lines into high-level directives.
     /// </summary>
+    /// <param name="text">The full source text of the configuration file.</param>
+    /// <param name="mergedLines">A list of lines already processed for multiline continuations.</param>
+    /// <returns>A list of <see cref="Directive"/> objects representing the logical structure of the file.</returns>
     public static List<Directive> Tokenize(string text, List<(string Text, LineSpan FirstLine, LineSpan LastLine, bool HasTrailingContinuation)> mergedLines)
     {
         var directives = new List<Directive>();
@@ -161,8 +165,10 @@ public static class DirectiveTokenizer
     }
 
     /// <summary>
-    /// Parses operation prefix character.
+    /// Maps a single prefix character to its corresponding <see cref="KvpOperation"/>.
     /// </summary>
+    /// <param name="c">The character prefix from a property assignment.</param>
+    /// <returns>The identified <see cref="KvpOperation"/>.</returns>
     public static KvpOperation ParseOperationPrefix(char c)
     {
         return c switch

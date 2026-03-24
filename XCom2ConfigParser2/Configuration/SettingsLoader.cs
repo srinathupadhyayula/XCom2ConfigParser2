@@ -4,35 +4,71 @@ using System.Text.RegularExpressions;
 namespace XCom2ConfigParser2.Configuration;
 
 /// <summary>
-/// Configuration settings loaded from .vscode/settings.json.
+/// Defines the global configuration settings for the XCom2ConfigParser2 tool, typically loaded from <c>.vscode/settings.json</c>.
 /// </summary>
 public sealed class ParserSettings
 {
+    /// <summary>Gets or sets the list of directories to scan for .ini files. Defaults to <c>["Config"]</c>.</summary>
     public List<string> IniRoots { get; set; } = new() { "Config" };
+
+    /// <summary>Gets or sets the relative path to the local source directory. Defaults to <c>"Src"</c>.</summary>
     public string LocalSrcRoot { get; set; } = "Src";
+
+    /// <summary>Gets or sets the path to the PowerShell build script used for dependency discovery. Defaults to <c>".scripts/build.ps1"</c>.</summary>
     public string BuildScriptPath { get; set; } = ".scripts/build.ps1";
+
+    /// <summary>Gets or sets the explicit list of external mods this project is compiled against.</summary>
     public List<string> ModsCompiledAgainst { get; set; } = new();
+
+    /// <summary>Gets or sets the absolute path to the Community Highlander source, if applicable.</summary>
     public string? CommunityHighlanderPath { get; set; }
+
+    /// <summary>Gets or sets the absolute path to the Alien Highlander source, if applicable.</summary>
     public string? AlienHighlanderPath { get; set; }
+
+    /// <summary>Gets or sets the shared root directory for all external mods. Used for relative path resolution.</summary>
     public string AllModsRoot { get; set; } = "../../Mods/";
+
+    /// <summary>Gets or sets the directory where persistent struct and variable caches are stored.</summary>
     public string CachePath { get; set; } = ".xcom2cache";
+
+    /// <summary>Gets or sets the root path of the XCOM 2 WOTC SDK.</summary>
     public string? SdkRoot { get; set; }
+
+    /// <summary>
+    /// Gets a value indicating whether an error occurred during the last attempt to parse the configuration file.
+    /// </summary>
     public bool HasJsonParseError { get; set; }
+
+    /// <summary>Gets the descriptive error message if <see cref="HasJsonParseError"/> is <c>true</c>.</summary>
     public string? JsonParseErrorMessage { get; set; }
 }
 
 /// <summary>
-/// Loads configuration from .vscode/settings.json.
+/// Responsible for loading and resolving configuration from the workspace <c>.vscode/settings.json</c> file.
 /// </summary>
+/// <remarks>
+/// This loader supports case-insensitive JSON property lookup and automatic resolution of VSCode-style 
+/// variables like <c>${workspaceFolder}</c>. It also features a fallback mechanism to extract 
+/// dependencies from a PowerShell build script if they aren't explicitly defined in the settings.
+/// </remarks>
 public sealed class SettingsLoader
 {
     private readonly string _projectRoot;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SettingsLoader"/> class.
+    /// </summary>
+    /// <param name="projectRoot">The absolute path to the project root directory.</param>
     public SettingsLoader(string projectRoot)
     {
         _projectRoot = projectRoot;
     }
 
+    /// <summary>
+    /// Loads the configuration from the workspace settings file, applying default values and resolving relative paths.
+    /// </summary>
+    /// <returns>A fully populated <see cref="ParserSettings"/> object.</returns>
     public ParserSettings Load()
     {
         var settings = new ParserSettings();

@@ -10,8 +10,16 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace XCom2ConfigParser2;
 
+/// <summary>
+/// The main entry point for the <c>XCom2ConfigParser2</c> application.
+/// </summary>
 public sealed class Program
 {
+    /// <summary>
+    /// Configures and executes the command-line application.
+    /// </summary>
+    /// <param name="args">The command-line arguments provided by the user.</param>
+    /// <returns>The exit code (0 for success, non-zero for failure).</returns>
     public static async Task<int> Main(string[] args)
     {
         var app = new CommandApp<ParseCommand>();
@@ -34,58 +42,73 @@ public sealed class Program
     }
 }
 
+/// <summary>
+/// Defines the command-line settings and arguments for the <c>parse</c> command.
+/// </summary>
 public sealed class ParseCommandSettings : CommandSettings
 {
+    /// <summary>Gets the target file or directory to process.</summary>
     [CommandArgument(0, "[path]")]
     [Description("File or directory to process (overrides iniRoots from settings.json)")]
     public string? Path { get; init; }
 
+    /// <summary>Gets a value indicating whether to output diagnostics in JSON format.</summary>
     [CommandOption("-j|--json")]
     [Description("Output in JSON format")]
     public bool Json { get; init; }
 
+    /// <summary>Gets a value indicating whether to suppress non-error console output.</summary>
     [CommandOption("-q|--quiet")]
     [Description("Suppress non-error output")]
     public bool Quiet { get; init; }
 
+    /// <summary>Gets a value indicating whether to display only the final statistical summary.</summary>
     [CommandOption("-s|--summary")]
     [Description("Show only summary")]
     public bool ShowSummary { get; init; }
 
+    /// <summary>Gets a value indicating whether to process directories recursively. Defaults to <c>true</c>.</summary>
     [CommandOption("-r|--recursive")]
     [Description("Process directories recursively")]
     [DefaultValue(true)]
     public bool Recursive { get; init; }
 
+    /// <summary>Gets a value indicating whether to explicitly disable recursive processing.</summary>
     [CommandOption("--no-recursive")]
     [Description("Disable recursive processing")]
     public bool NoRecursive { get; init; }
 
+    /// <summary>Gets an optional glob pattern for file matching (e.g., <c>**/*.ini</c>).</summary>
     [CommandOption("-p|--pattern")]
     [Description("Glob pattern for files (use **/*.ini for recursive search)")]
     public string? Pattern { get; init; }
 
+    /// <summary>Gets the path to the project root directory (auto-detected if not specified).</summary>
     [CommandOption("-P|--project-root")]
-    [Description(
-        "Path to project root directory containing .vscode/settings.json (auto-detected from current directory if not specified)")]
+    [Description("Path to project root directory containing .vscode/settings.json (auto-detected from current directory if not specified)")]
     public string? ProjectRoot { get; init; }
 
+    /// <summary>Gets the absolute path to a specific <c>settings.json</c> file.</summary>
     [CommandOption("-S|--settings")]
     [Description("Path to .vscode/settings.json file (overrides --project-root)")]
     public string? SettingsPath { get; init; }
 
+    /// <summary>Gets a value indicating whether to skip deep struct member validation.</summary>
     [CommandOption("--no-struct-validation")]
     [Description("Disable struct member validation")]
     public bool NoStructValidation { get; init; }
 
+    /// <summary>Gets the path to a directory where struct metadata should be cached.</summary>
     [CommandOption("--cache-dir")]
     [Description("Path to struct cache directory (overrides settings.json)")]
     public string? CacheDir { get; init; }
 
+    /// <summary>Gets a value indicating whether to force a full re-indexing of all struct source files.</summary>
     [CommandOption("--force-reindex")]
     [Description("Force re-indexing of all structs (ignore cache)")]
     public bool ForceReindex { get; init; }
 
+    /// <summary>Gets a value indicating whether to generate a categorized audit log file. Defaults to <c>true</c>.</summary>
     [CommandOption("--log")]
     [Description("Generate categorized log file (enabled by default)")]
     [DefaultValue(true)]

@@ -7,27 +7,54 @@ using XCom2ConfigParser2.Validation;
 namespace XCom2ConfigParser2.CLI;
 
 /// <summary>
-/// Result of processing a single file.
+/// Encapsulates the results of validating a single configuration file, including any identified diagnostics.
 /// </summary>
 public sealed class FileProcessingResult
 {
+    /// <summary>Gets or sets the absolute path of the processed file.</summary>
     public string FilePath { get; set; } = "";
+
+    /// <summary>Gets or sets the collection of diagnostics (errors, warnings) found during processing.</summary>
     public IReadOnlyList<Diagnostic> Diagnostics { get; set; } = Array.Empty<Diagnostic>();
+
+    /// <summary>Gets a value indicating whether any diagnostics with <see cref="DiagnosticSeverity.Error"/> were found.</summary>
     public bool HasErrors => Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error);
+
+    /// <summary>Gets a value indicating whether any diagnostics with <see cref="DiagnosticSeverity.Warning"/> were found.</summary>
     public bool HasWarnings => Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Warning);
+
+    /// <summary>Gets the total count of error-level diagnostics.</summary>
     public int ErrorCount => Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error);
+
+    /// <summary>Gets the total count of warning-level diagnostics.</summary>
     public int WarningCount => Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Warning);
 }
 
 /// <summary>
-/// Processes files through the validation pipeline.
+/// Orchestrates the multi-stage validation pipeline for configuration files.
 /// </summary>
+/// <remarks>
+/// The pipeline includes:
+/// <list type="number">
+/// <item><description>UTF-8 health checks and line merging.</description></item>
+/// <item><description>Tokenization via <see cref="DirectiveTokenizer"/>.</description></item>
+/// <item><description>Syntax validation via <see cref="IValidator"/>.</description></item>
+/// <item><description>Contextual struct member validation via <see cref="StructMemberValidator"/> (if enabled).</description></item>
+/// </list>
+/// </remarks>
 public sealed class FileProcessor
 {
     private readonly IValidator _syntaxValidator;
     private readonly StructMemberValidator? _structValidator;
     private readonly bool _structValidationEnabled;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FileProcessor"/> class.
+    /// </summary>
+    /// <param name="syntaxValidator">The validator responsible for basic syntax rules.</param>
+    /// <param name="settings">The global parser settings.</param>
+    /// <param name="structValidationEnabled">Whether to enable deep struct member validation.</param>
+    /// <param name="modSrcCache">Optional cache for mod source paths, required for struct resolution.</param>
     public FileProcessor(
         IValidator syntaxValidator,
         Configuration.ParserSettings settings,
@@ -42,7 +69,7 @@ public sealed class FileProcessor
     }
 
     /// <summary>
-    /// Saves all underlying caches (e.g., VariableCache) to disk.
+    /// Persists all underlying diagnostic and metadata caches (e.g., <see cref="VariableCache"/>) to disk.
     /// </summary>
     public void SaveCaches()
     {
@@ -50,8 +77,10 @@ public sealed class FileProcessor
     }
 
     /// <summary>
-    /// Processes a single file through the validation pipeline.
+    /// Executes the full validation pipeline on the specified configuration file.
     /// </summary>
+    /// <param name="filePath">The absolute path to the .ini file to validate.</param>
+    /// <returns>A <see cref="FileProcessingResult"/> containing the outcome and any identified diagnostics.</returns>
     public FileProcessingResult ProcessFile(string filePath)
     {
         var result = new FileProcessingResult { FilePath = filePath };

@@ -6,24 +6,38 @@ using XCom2ConfigParser2.Core;
 namespace XCom2ConfigParser2.CLI;
 
 /// <summary>
-/// Output modes for the CLI.
+/// Defines the available output formats and verbosity levels for the CLI.
 /// </summary>
 public enum OutputMode
 {
+    /// <summary> Standard console output with full diagnostic details. </summary>
     Default,
+
+    /// <summary> Machine-readable JSON output for all results and summary data. </summary>
     Json,
+
+    /// <summary> Minimal console output, typically showing only file paths and error messages without source context. </summary>
     Quiet,
+
+    /// <summary> Shows only the final statistical summary of the validation run. </summary>
     Summary
 }
 
 /// <summary>
-/// Summary of validation results.
+/// Provides a high-level statistical summary of the entire validation session.
 /// </summary>
 public sealed class ValidationResultSummary
 {
+    /// <summary>Gets or sets the total number of files scanned.</summary>
     public int FilesProcessed { get; set; }
+
+    /// <summary>Gets or sets the number of files that contained at least one error.</summary>
     public int FilesWithErrors { get; set; }
+
+    /// <summary>Gets or sets the aggregate count of all error-level diagnostics.</summary>
     public int TotalErrors { get; set; }
+
+    /// <summary>Gets or sets the aggregate count of all warning-level diagnostics.</summary>
     public int TotalWarnings { get; set; }
 }
 
@@ -70,25 +84,31 @@ public sealed class JsonErrorResult
 }
 
 /// <summary>
-/// JSON output schema for the complete result.
+/// Defines the root schema for JSON output, aggregating results across all files and providing a final summary.
 /// </summary>
 public sealed class JsonOutput
 {
+    /// <summary>Gets or sets the list of results for each processed file.</summary>
     [JsonPropertyName("files")]
     public List<JsonFileResult> Files { get; set; } = new();
 
+    /// <summary>Gets or sets the overall validation summary.</summary>
     [JsonPropertyName("summary")]
     public ValidationResultSummary Summary { get; set; } = new();
 }
 
 /// <summary>
-/// Formats validation results for output.
+/// Provides static utilities for formatting and displaying validation results across different output modes.
 /// </summary>
 public static class OutputFormatter
 {
     /// <summary>
-    /// Formats a single file's diagnostics for output.
+    /// Displays diagnostics for a single file according to the specified <see cref="OutputMode"/>.
     /// </summary>
+    /// <param name="filePath">The path of the file.</param>
+    /// <param name="diagnostics">The list of diagnostics to display.</param>
+    /// <param name="mode">The requested output mode.</param>
+    /// <param name="console">The ANSI console instance for output.</param>
     public static void Format(
         string filePath,
         IReadOnlyList<Diagnostic> diagnostics,
@@ -103,11 +123,11 @@ public static class OutputFormatter
                 break;
 
             case OutputMode.Json:
-                // JSON is formatted at a higher level
+                // JSON is formatted at a higher level via FormatJson
                 break;
 
             case OutputMode.Summary:
-                // Summary is formatted at a higher level
+                // Summary is formatted at a higher level via FormatSummary
                 break;
         }
     }
@@ -141,8 +161,11 @@ public static class OutputFormatter
     }
 
     /// <summary>
-    /// Formats all results as JSON.
+    /// Serializes entire session results into a standardized JSON string.
     /// </summary>
+    /// <param name="results">The collection of per-file results.</param>
+    /// <param name="summary">The overall run summary.</param>
+    /// <returns>A formatted JSON string.</returns>
     public static string FormatJson(
         List<(string Path, IReadOnlyList<Diagnostic> Diagnostics)> results,
         ValidationResultSummary summary)
@@ -188,8 +211,10 @@ public static class OutputFormatter
     }
 
     /// <summary>
-    /// Formats a summary of validation results.
+    /// Displays a terminal-friendly summary of the validation session.
     /// </summary>
+    /// <param name="summary">The summary data to display.</param>
+    /// <param name="console">The ANSI console instance for output.</param>
     public static void FormatSummary(ValidationResultSummary summary, IAnsiConsole console)
     {
         console.WriteLine($"Files processed: {summary.FilesProcessed}");

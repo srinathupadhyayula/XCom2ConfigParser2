@@ -3,14 +3,17 @@ using XCom2ConfigParser2.Core;
 namespace XCom2ConfigParser2.Parser;
 
 /// <summary>
-/// Splits text into lines, handling line endings and continuation characters.
+/// Provides utilities for splitting raw configuration text into physical and logical lines.
+/// Handles Unreal Engine 3 (XCOM 2) specific line-ending and continuation rules (using '\\').
 /// </summary>
 public static class LineSplitter
 {
     /// <summary>
-    /// Splits the text into lines with continuation handling.
-    /// Lines ending with \\ are merged with the next line.
+    /// Decomposes the input text into a sequence of <see cref="LineSpan"/> objects.
+    /// Identifies physical line boundaries (\r, \n, \r\n) and detects the presence of continuation markers (\\).
     /// </summary>
+    /// <param name="text">The raw source text to process.</param>
+    /// <returns>A list of discovered <see cref="LineSpan"/> structures.</returns>
     public static List<LineSpan> Split(string text)
     {
         var lines = new List<LineSpan>();
@@ -89,6 +92,14 @@ public static class LineSplitter
         return lines;
     }
 
+    /// <summary>
+    /// Searches for the '\\' continuation sequence at the end of a line segment.
+    /// Accounts for optional trailing whitespace after the marker.
+    /// </summary>
+    /// <param name="text">The source text.</param>
+    /// <param name="lineStart">The start index of the current line.</param>
+    /// <param name="position">The end index of the current line segment.</param>
+    /// <returns>The index of the first '\' in the sequence, or -1 if no continuation is found.</returns>
     private static int GetContinuationIndex(string text, int lineStart, int position)
     {
         if (position < lineStart + 2)
@@ -107,9 +118,15 @@ public static class LineSplitter
     }
 
     /// <summary>
-    /// Gets merged lines with continuation applied.
-    /// Returns tuples of (merged line text, first span, last span, has trailing continuation error).
+    /// Aggregates physical line spans into single logical lines by applying continuation merging rules.
+    /// Concatenates continued lines with exactly two spaces as separation, as per XCOM 2 engine specifications.
     /// </summary>
+    /// <param name="text">The raw source text.</param>
+    /// <param name="lines">The list of <see cref="LineSpan"/> objects produced by <see cref="Split"/>.</param>
+    /// <returns>
+    /// A list of tuples containing the merged text, the original starting and ending line spans, 
+    /// and a flag indicating if the file ended prematurely with a continuation marker.
+    /// </returns>
     public static List<(string Text, LineSpan FirstLine, LineSpan LastLine, bool HasTrailingContinuation)> GetMergedLines(string text, List<LineSpan> lines)
     {
         var result = new List<(string, LineSpan, LineSpan, bool)>();
