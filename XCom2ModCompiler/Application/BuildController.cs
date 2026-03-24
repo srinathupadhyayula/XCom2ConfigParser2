@@ -20,7 +20,7 @@ public class BuildController
     private readonly BuildTracker _tracker;
     private readonly ScriptCompiler _compiler;
     private readonly AssetCooker _cooker;
-    private readonly IFileMirror _mirror;
+    private readonly IFileMirrorParity _mirror;
     private readonly IProcessRunner _runner;
     private readonly ShaderPrecompiler _shaderPrecompiler;
     private readonly MissingUncookedCopier _missingUncookedCopier;
@@ -34,7 +34,7 @@ public class BuildController
         "OnlineSubsystemLive", "OnlineSubsystemSteamworks", "OnlineSubsystemPSN"
     };
 
-    public BuildController(BuildOptions options, ILogger<BuildController> logger, BuildTracker tracker, ScriptCompiler compiler, AssetCooker cooker, IFileMirror mirror, IProcessRunner runner, ShaderPrecompiler shaderPrecompiler, MissingUncookedCopier missingUncookedCopier, ProjectSynchronizer projectSynchronizer)
+    public BuildController(BuildOptions options, ILogger<BuildController> logger, BuildTracker tracker, ScriptCompiler compiler, AssetCooker cooker, IFileMirrorParity mirror, IProcessRunner runner, ShaderPrecompiler shaderPrecompiler, MissingUncookedCopier missingUncookedCopier, ProjectSynchronizer projectSynchronizer)
     {
         _options = options;
         _logger = logger;
@@ -256,7 +256,16 @@ public class BuildController
                     }
 
                     // 1.5c Mirror main mod sources
-                    await CopySrcFolderAsync(modSrcPath, sdkDevSrcPath, definedMacros, ct);
+                    if (Directory.Exists(modSrcPath))
+                    {
+                        await CopySrcFolderAsync(modSrcPath, sdkDevSrcPath, definedMacros, ct);
+                    }
+                    else
+                    {
+                        // Fallback discovery: some mods put packages directly in the project root
+                        _logger.LogInformation($"No 'Src' folder found in {projectDir}. Falling back to root source discovery.");
+                        await CopySrcFolderAsync(projectDir, sdkDevSrcPath, definedMacros, ct);
+                    }
                 },
                 "Populating", "Populated", "Development\\Src folder", timings);
 
@@ -320,22 +329,28 @@ public class BuildController
 
                     if (shouldRebuild)
                     {
-                        // Get paths to clean and delete them
-                        var allScriptPackages = GetAllScriptPackages();
-                        if (allScriptPackages.Length > 0)
+                        // Get the current INI content to know what packages exist
+                        string targetIni = Path.Combine(_options.SdkPath, "XComGame", "Config", "XComEngine.ini");
+                        if (File.Exists(targetIni))
                         {
-                            var pathsToClean = await _tracker.GetSelectiveCleanPathsAsync(_options.SdkPath, allScriptPackages, ct);
-                            var scriptPath = Path.Combine(_options.SdkPath, "XComGame", "Script");
-                            Console.WriteLine($"Selective cleaning of compiled scripts from {scriptPath} to avoid compiler error...");
-                            foreach (var path in pathsToClean)
+                            string iniContent = await File.ReadAllTextAsync(targetIni, ct);
+                            var allScriptPackages = GetAllScriptPackages(iniContent);
+                            
+                            if (allScriptPackages.Length > 0)
                             {
-                                if (File.Exists(path))
+                                var pathsToClean = await _tracker.GetSelectiveCleanPathsAsync(_options.SdkPath, allScriptPackages, ct);
+                                var scriptPath = Path.Combine(_options.SdkPath, "XComGame", "Script");
+                                Console.WriteLine($"Selective cleaning of compiled scripts from {scriptPath} to avoid compiler error...");
+                                foreach (var path in pathsToClean)
                                 {
-                                    Console.WriteLine($"Cleaning {path}");
-                                    await _mirror.DeleteAsync(path, ct: ct);
+                                    if (File.Exists(path))
+                                    {
+                                        Console.WriteLine($"Cleaning {path}");
+                                        await _mirror.DeleteAsync(path, ct: ct);
+                                    }
                                 }
+                                Console.WriteLine("Cleaned.");
                             }
-                            Console.WriteLine("Cleaned.");
                         }
                     }
                 },
@@ -360,118 +375,85 @@ public class BuildController
             }
 
 
-            // 2. Compile Base
+            // 2. Compile (Single Pass Parity with build_common.ps1)
             var receiver = new MakeOutputReceiver(new[] { _options.ModSrcRoot }.Concat(_options.IncludePaths).ToArray());
-            await PerformStepAsync(
-                async () =>
-                {
-                    bool baseSuccess = await _compiler.CompileBaseAsync(_options, receiver, ct);
-                    if (!baseSuccess)
-                    {
-                        throw new BuildFailureException("Base compilation", 1);
-                    }
-                },
-                "Compiling", "Compiled", "base script packages", timings);
-
-            // 3. Compile Mod (with Two-Pass support)
             await PerformStepAsync(
                 async () =>
                 {
                     var settingsLoader = new XCom2ModCompiler.Configuration.SettingsLoader(_options.ProjectRoot);
                     var settings = settingsLoader.Load();
+                    // Target the SDK's XComEngine.ini (PS1 parity: UCC make always reads from SDK config)
+                    string targetIni = Path.Combine(_options.SdkPath, "XComGame", "Config", "XComEngine.ini");
                     var iniHandler = new IniHandler(_options.ProjectRoot, settings.IniRoots);
-                    
-                    string targetIni = iniHandler.FindTargetIni();
 
-                    if (!string.IsNullOrEmpty(targetIni))
+                    if (!string.IsNullOrEmpty(targetIni) && File.Exists(targetIni))
                     {
                         string originalContent = await File.ReadAllTextAsync(targetIni, ct);
                         
-                        // 3a. Pre-stage the configuration to the staging path
+                        // Pre-stage the configuration to the staging path
                         string stagingConfigDir = Path.Combine(_options.StagingPath, "Config");
                         string stagingIniPath = Path.Combine(stagingConfigDir, "XComEngine.ini");
                         Directory.CreateDirectory(stagingConfigDir);
 
-                        if (iniHandler.IsTwoPassNeeded(originalContent))
+                        // Prepare the INI with all packages (including the mod and any dependencies)
+                        // PS1 parity: [UnrealEd.EditorEngine] +ModEditPackages=...
+                        var dependentMods = iniHandler.GetDependantPackages(originalContent);
+                        var stagedContent = iniHandler.PrepareStagedIni(originalContent, _options.ModNameCanonical, dependentMods);
+                        
+                        // We must write to the actual target INI because UCC make reads from the SDK/Game config, not the staging dir
+                        // We restore it in the finally block below
+                        await File.WriteAllTextAsync(targetIni, stagedContent, ct);
+                        await File.WriteAllTextAsync(stagingIniPath, stagedContent, ct); 
+
+                        try
                         {
-                            _logger.ZLogInformation($"");
-                            _logger.ZLogInformation($"================================================================================");
-                            _logger.ZLogInformation($"   TWO-PASS COMPILATION ENABLED");
-                            _logger.ZLogInformation($"================================================================================");
-                            _logger.ZLogInformation($"Target INI: {targetIni}");
-                            _logger.ZLogInformation($"Staging Config: {stagingIniPath}");
-                            _logger.ZLogInformation($"");
-                            
-                            try
+                            // Clean output .u files (PS1 parity lines 517-526)
+                            _logger.LogInformation("Cleaning compiled scripts to ensure fresh build...");
+                            var uFile = Path.Combine(_options.SdkPath, "XComGame", "Script", $"{_options.ModNameCanonical}.u");
+                            if (File.Exists(uFile))
                             {
-                                // Pass 1: No Dependent Packages
-                                _logger.ZLogInformation($"--------------------------------------------------------------------------------");
-                                _logger.ZLogInformation($">>> PASS 1: Compiling without dependent packages...");
-                                _logger.ZLogInformation($"--------------------------------------------------------------------------------");
-                                var pass1Content = iniHandler.PrepareStagedIni(originalContent, _options.ModNameCanonical);
-                                await File.WriteAllTextAsync(targetIni, pass1Content, ct);
-                                await File.WriteAllTextAsync(stagingIniPath, pass1Content, ct); 
-                                
-                                string stagingPath = Path.Combine(_options.SdkPath, "XComGame", "Mods", _options.ModNameCanonical);
-                                bool pass1Success = await _compiler.CompileModAsync(_options.ModNameCanonical, stagingPath, _options, receiver, ct);
-                                if (!pass1Success)
-                                {
-                                    throw new BuildFailureException("Script compilation (Pass 1)", 1);
-                                }
-                                _logger.ZLogInformation($">>> PASS 1 COMPLETE");
-                                _logger.ZLogInformation($"");
-
-                                // Pass 2: With Dependent Packages
-                                _logger.ZLogInformation($"--------------------------------------------------------------------------------");
-                                _logger.ZLogInformation($">>> PASS 2: Compiling with dependent packages...");
-                                _logger.ZLogInformation($"--------------------------------------------------------------------------------");
-                                var dependentMods = iniHandler.GetDependantPackages(originalContent);
-                                var pass2Content = iniHandler.PrepareStagedIni(originalContent, _options.ModNameCanonical, dependentMods);
-                                await File.WriteAllTextAsync(targetIni, pass2Content, ct);
-                                await File.WriteAllTextAsync(stagingIniPath, pass2Content, ct); 
-
-                                bool pass2Success = await _compiler.CompileModAsync(_options.ModNameCanonical, stagingPath, _options, receiver, ct);
-                                if (!pass2Success)
-                                {
-                                    throw new BuildFailureException("Script compilation (Pass 2)", 1);
-                                }
-
-                                foreach (var depMod in dependentMods)
-                                {
-                                    outputPaths.Add(Path.Combine(_options.SdkPath, "XComGame", "Script", $"{depMod}.u"));
-                                }
-                                _logger.ZLogInformation($">>> PASS 2 COMPLETE");
-                                _logger.ZLogInformation($"");
+                                File.Delete(uFile);
                             }
-                            finally
+                            foreach (var depMod in dependentMods)
                             {
-                                _logger.ZLogInformation($"Restoring XComEngine.ini...");
-                                await File.WriteAllTextAsync(targetIni, originalContent, ct);
-                                _logger.ZLogInformation($"================================================================================");
+                                var depUFile = Path.Combine(_options.SdkPath, "XComGame", "Script", $"{depMod}.u");
+                                if (File.Exists(depUFile))
+                                {
+                                    File.Delete(depUFile);
+                                }
                             }
-                        }
-                        else
-                        {
-                            var stagedContent = iniHandler.PrepareStagedIni(originalContent, _options.ModNameCanonical);
-                            await File.WriteAllTextAsync(stagingIniPath, stagedContent, ct);
-                            bool modSuccess = await _compiler.CompileModAsync(_options.ModNameCanonical, _options.StagingPath, _options, receiver, ct);
-                            if (!modSuccess)
+
+                            bool success = await _compiler.CompileBaseAsync(_options, receiver, ct);
+                            if (!success)
                             {
                                 throw new BuildFailureException("Script compilation", 1);
                             }
+
+                            // Record output paths for successful build reporting
+                            var allPackages = GetAllScriptPackages(stagedContent);
+                            foreach (var pkg in allPackages)
+                            {
+                                outputPaths.Add(Path.Combine(_options.SdkPath, "XComGame", "Script", $"{pkg}.u"));
+                            }
+                        }
+                        finally
+                        {
+                            _logger.LogInformation("Restoring XComEngine.ini...");
+                            await File.WriteAllTextAsync(targetIni, originalContent, ct);
                         }
                     }
                     else
                     {
-                        bool modSuccess = await _compiler.CompileModAsync(_options.ModNameCanonical, _options.StagingPath, _options, receiver, ct);
-                        if (!modSuccess)
+                        // Fallback if no INI found (should not happen in standard setup)
+                        bool success = await _compiler.CompileModAsync(_options.ModNameCanonical, _options.StagingPath, _options, receiver, ct);
+                        if (!success)
                         {
                             throw new BuildFailureException("Script compilation", 1);
                         }
+                        outputPaths.Add(Path.Combine(_options.SdkPath, "XComGame", "Script", $"{_options.ModNameCanonical}.u"));
                     }
-                    outputPaths.Add(Path.Combine(_options.SdkPath, "XComGame", "Script", $"{_options.ModNameCanonical}.u"));
                 },
-                "Compiling", "Compiled", "mod script packages", timings);
+                "Compiling", "Compiled", "script packages", timings);
 
             // Record Core.u timestamp (needed for incremental build detection)
             await PerformStepAsync(
@@ -479,7 +461,9 @@ public class BuildController
                 "Recording", "Recorded", "Core.u timestamp", timings);
 
             // Copy script packages to staging
-            var allScriptPackages = GetAllScriptPackages();
+            string currentIniPath = Path.Combine(_options.SdkPath, "XComGame", "Config", "XComEngine.ini");
+            string currentIniContent = File.Exists(currentIniPath) ? await File.ReadAllTextAsync(currentIniPath, ct) : "";
+            var allScriptPackages = GetAllScriptPackages(currentIniContent);
             if (allScriptPackages.Length > 0)
             {
                 await PerformStepAsync(
@@ -904,31 +888,36 @@ public class BuildController
     }
 
     /// <summary>
-    /// Gets all script packages including dependencies.
+    /// Gets all script packages from the target XComEngine.ini ModEditPackages.
     /// </summary>
-    private string[] GetAllScriptPackages()
+    private string[] GetAllScriptPackages(string iniContent)
     {
         var pkgs = new List<string>();
-        
-        // Add mod's own packages
-        var modSrcPath = Path.Combine(_options.ModSrcRoot, "Src");
-        if (Directory.Exists(modSrcPath))
-        {
-            var modPackages = Directory.GetDirectories(modSrcPath);
-            pkgs.AddRange(modPackages.Select(Path.GetFileName).OfType<string>());
-        }
+        var lines = iniContent.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+        bool inEngineSection = false;
 
-        // Add dependency packages
-        foreach (var includeDir in _options.IncludePaths)
+        foreach (var line in lines)
         {
-            if (Directory.Exists(includeDir))
+            var trimmed = line.Trim();
+            if (string.Equals(trimmed, "[UnrealEd.EditorEngine]", StringComparison.OrdinalIgnoreCase))
             {
-                var includePackages = Directory.GetDirectories(includeDir);
-                pkgs.AddRange(includePackages.Select(Path.GetFileName).OfType<string>());
+                inEngineSection = true;
+                continue;
+            }
+            if (inEngineSection)
+            {
+                if (trimmed.StartsWith("[")) break;
+                if (trimmed.Contains("ModEditPackages=", StringComparison.OrdinalIgnoreCase))
+                {
+                    var pkg = trimmed.Split('=')[1].Trim();
+                    if (!string.IsNullOrEmpty(pkg))
+                    {
+                        pkgs.Add(pkg);
+                    }
+                }
             }
         }
 
-        // Filter out native packages
         return pkgs
             .Where(pkg => !_nativeScriptPackages.Contains(pkg, StringComparer.OrdinalIgnoreCase))
             .Distinct(StringComparer.OrdinalIgnoreCase)

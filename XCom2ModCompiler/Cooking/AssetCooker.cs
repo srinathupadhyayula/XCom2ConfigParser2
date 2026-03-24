@@ -16,7 +16,7 @@ public class AssetCooker
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<AssetCooker> _logger;
     private readonly IProcessRunner _runner;
-    private readonly IFileMirror _mirror;
+    private readonly IFileMirrorParity _mirror;
     private readonly BuildTracker _tracker;
 
     public AssetCooker(
@@ -24,7 +24,7 @@ public class AssetCooker
         string gamePath,
         string buildCachePath,
         IProcessRunner runner,
-        IFileMirror mirror,
+        IFileMirrorParity mirror,
         BuildTracker tracker,
         ILoggerFactory loggerFactory,
         ILogger<AssetCooker> logger)

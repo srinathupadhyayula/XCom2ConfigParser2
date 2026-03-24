@@ -9,10 +9,10 @@ namespace XCom2ModCompiler.Utilities;
 
 public class MissingUncookedCopier
 {
-    private readonly IFileMirror _mirror;
+    private readonly IFileMirrorParity _mirror;
     private readonly ILogger<MissingUncookedCopier> _logger;
 
-    public MissingUncookedCopier(IFileMirror mirror, ILogger<MissingUncookedCopier> logger)
+    public MissingUncookedCopier(IFileMirrorParity mirror, ILogger<MissingUncookedCopier> logger)
     {
         _mirror = mirror;
         _logger = logger;

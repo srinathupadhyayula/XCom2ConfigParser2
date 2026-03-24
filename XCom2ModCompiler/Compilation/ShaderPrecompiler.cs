@@ -12,10 +12,10 @@ namespace XCom2ModCompiler.Compilation;
 public class ShaderPrecompiler
 {
     private readonly IProcessRunner _runner;
-    private readonly IFileMirror _mirror;
+    private readonly IFileMirrorParity _mirror;
     private readonly ILogger<ShaderPrecompiler> _logger;
 
-    public ShaderPrecompiler(IProcessRunner runner, IFileMirror mirror, ILogger<ShaderPrecompiler> logger)
+    public ShaderPrecompiler(IProcessRunner runner, IFileMirrorParity mirror, ILogger<ShaderPrecompiler> logger)
     {
         _runner = runner;
         _mirror = mirror;

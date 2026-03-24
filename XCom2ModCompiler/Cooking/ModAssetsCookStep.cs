@@ -18,7 +18,7 @@ public class ModAssetsCookStep
     private readonly BuildOptions _project;
     private readonly ContentOptions _contentOptions;
     private readonly IProcessRunner _runner;
-    private readonly IFileMirror _mirror;
+    private readonly IFileMirrorParity _mirror;
     private readonly BuildTracker _tracker;
     private readonly string _stagingPath;
     private readonly ILogger<ModAssetsCookStep> _logger;
@@ -42,7 +42,7 @@ public class ModAssetsCookStep
         ContentOptions contentOptions,
         string stagingPath,
         IProcessRunner runner,
-        IFileMirror mirror,
+        IFileMirrorParity mirror,
         BuildTracker tracker,
         ILogger<ModAssetsCookStep> logger)
     {
