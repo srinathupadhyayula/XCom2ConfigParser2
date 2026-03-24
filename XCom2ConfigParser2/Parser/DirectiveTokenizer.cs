@@ -8,9 +8,9 @@ namespace XCom2ConfigParser2.Parser;
 /// </summary>
 public static class DirectiveTokenizer
 {
-    // Section header: [ObjectName] or [Package.Object]
+    // Section header: [ObjectName] or [ObjectName ClassName]
     private static readonly Regex SectionHeaderRegex =
-        new(@"^\[([A-Za-z][A-Za-z0-9_]*(?:[ .][A-Za-z][A-Za-z0-9_]*)?)\]\s*(;.*)?$");
+        new(@"^\[([A-Za-z][A-Za-z0-9_]*(?:[ \t.]+[A-Za-z][A-Za-z0-9_]*)?)\]\s*(;.*)?$");
 
     // Property name: MyProp, MyProp[0], MyProp(1)
     private static readonly Regex PropertyNameRegex =
@@ -19,15 +19,16 @@ public static class DirectiveTokenizer
     /// <summary>
     /// Tokenizes merged lines into directives.
     /// </summary>
-    public static List<Directive> Tokenize(string text, List<(string Text, LineSpan FirstSpan, bool HasTrailingContinuation)> mergedLines)
+    public static List<Directive> Tokenize(string text, List<(string Text, LineSpan FirstLine, LineSpan LastLine, bool HasTrailingContinuation)> mergedLines)
     {
         var directives = new List<Directive>();
 
-        foreach (var (lineText, firstSpan, hasTrailingContinuation) in mergedLines)
+        foreach (var (lineText, firstSpan, lastSpan, hasTrailingContinuation) in mergedLines)
         {
             string trimmed = lineText.TrimStart();
             int leadingWhitespace = lineText.Length - trimmed.Length;
             int lineStart = firstSpan.Start + leadingWhitespace;
+            int lineEnd = lastSpan.End; // Full span from start of first line to end of last line
 
             // Empty line
             if (string.IsNullOrWhiteSpace(trimmed))
@@ -63,14 +64,14 @@ public static class DirectiveTokenizer
                         if (!string.IsNullOrEmpty(afterBracket.Trim()) && !trimmedAfterBracket.StartsWith(";"))
                         {
                             // Malformed header
-                            var span = new Span(lineStart, lineStart + trimmed.Length);
-                            directives.Add(Directive.Section(new SectionHeader(span, new Span(lineStart + 1, lineStart + trimmed.Length - 1))));
+                            var span = new Span(lineStart, lineEnd);
+                            directives.Add(Directive.Section(new SectionHeader(span, new Span(lineStart + 1, lineStart + trimmed.LastIndexOf(']')))));
                             continue;
                         }
                     }
                 }
 
-                var fullSpan = new Span(lineStart, lineStart + trimmed.Length);
+                var fullSpan = new Span(lineStart, lineEnd);
                 var objectNameSpan = new Span(lineStart + 1, lineStart + closeBracketPos);
                 directives.Add(Directive.Section(new SectionHeader(fullSpan, objectNameSpan)));
                 continue;
@@ -119,9 +120,7 @@ public static class DirectiveTokenizer
                 }
 
                 string propertyName = beforeEq.Substring(nameStart).Trim();
-                string value = afterEq.TrimEnd();
-
-                // Remove trailing comment from value
+                string value = afterEq;
                 int commentPos = value.IndexOf(';');
                 if (commentPos >= 0)
                 {
@@ -130,19 +129,23 @@ public static class DirectiveTokenizer
                     int quoteCount = beforeComment.Count(c => c == '"');
                     if (quoteCount % 2 == 0)
                     {
-                        value = beforeComment.TrimEnd();
+                        value = beforeComment;
                     }
                 }
+                value = value.Trim();
 
-                int propStart = lineStart + nameStart;
+                int propStart = lineStart + lineText.IndexOf(beforeEq) + nameStart;
                 int propEnd = propStart + propertyName.Length;
+                
                 int valueStart = lineStart + eqPos + 1;
-                int valueEnd = valueStart + value.Length;
+                for (int j = 0; j < afterEq.Length && char.IsWhiteSpace(afterEq[j]); j++)
+                    valueStart++;
 
                 var kvp = new Kvp(
-                    new Span(lineStart, Math.Max(valueEnd, lineStart + trimmed.Length)),
+                    new Span(lineStart, lineEnd),
                     new Span(propStart, propEnd),
-                    new Span(valueStart, valueEnd),
+                    new Span(valueStart, lineEnd),
+                    value,
                     operation
                 );
                 directives.Add(Directive.KvpDirective(kvp));
@@ -150,7 +153,7 @@ public static class DirectiveTokenizer
             }
 
             // Unknown directive
-            var unknownSpan = new Span(lineStart, lineStart + trimmed.Length);
+            var unknownSpan = new Span(lineStart, lineEnd);
             directives.Add(Directive.UnknownDirective(new Unknown(unknownSpan)));
         }
 

@@ -41,7 +41,7 @@ public class LineSplitterTests
 
         lines.Count.ShouldBe(2);
         lines[0].HasContinuation.ShouldBeTrue();
-        lines[0].Extract(text).ShouldBe("Line1 ");
+        lines[0].Extract(text).ShouldBe("Line1");
     }
 
     [Fact]
@@ -75,6 +75,7 @@ public class LineSplitterTests
         merged.Count.ShouldBe(1);
         merged[0].Text.ShouldContain("Line1");
         merged[0].Text.ShouldContain("Line2");
+        merged[0].Text.ShouldBe("Line1  Line2");
     }
 
     [Fact]
@@ -87,5 +88,21 @@ public class LineSplitterTests
 
         merged.Count.ShouldBe(1);
         merged[0].HasTrailingContinuation.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Split_LineWithContinuationAndTrailingWhitespace_TrimsCorrectly()
+    {
+        var text = "Line1 \\\\  \r\nLine2";
+
+        var lines = LineSplitter.Split(text);
+
+        lines.Count.ShouldBe(2);
+        lines[0].HasContinuation.ShouldBeTrue();
+        lines[0].Extract(text).ShouldBe("Line1");
+        
+        var merged = LineSplitter.GetMergedLines(text, lines);
+        merged.Count.ShouldBe(1);
+        merged[0].Text.ShouldBe("Line1  Line2");
     }
 }

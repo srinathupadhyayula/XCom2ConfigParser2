@@ -136,6 +136,21 @@ public class DirectiveTokenizerTests
     }
 
     [Fact]
+    public void Tokenize_MultiLineKvp_ReturnsCorrectMergedValue()
+    {
+        var text = "+Prop = ( \\\\\n  Elem1 = \"Val1\", \\\\\n  Elem2 = (A=1) \\\\\n)";
+        var lines = LineSplitter.Split(text);
+        var merged = LineSplitter.GetMergedLines(text, lines);
+
+        var directives = DirectiveTokenizer.Tokenize(text, merged);
+
+        directives.Count.ShouldBe(1);
+        var kvp = directives[0].Kvp!.Value;
+        // Joint with 2 spaces. Line 2 has leading 2 spaces. Total 4.
+        kvp.MergedValue.ShouldBe("(    Elem1 = \"Val1\",    Elem2 = (A=1)  )");
+    }
+
+    [Fact]
     public void Tokenize_MultipleDirectives_ReturnsAllDirectives()
     {
         var text = "[Section]\nProperty=Value\n+Array=Item";

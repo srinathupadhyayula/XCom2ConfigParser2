@@ -117,4 +117,18 @@ public class StructParserTests
         var result = StructParser.TryParse("(Invalid");
         result.ShouldBeNull();
     }
+
+    [Fact]
+    public void Parse_ArrayWithTrailingComma_ShouldStop()
+    {
+        // This validates that the parser correctly handles trailing commas in arrays,
+        // which would occur after merging a multi-line KVP like:
+        // MyArray = (Val1, \\\n  )
+        // Which translates to: (Val1,   )
+        
+        var result = StructParser.Parse("(\"SpectrumMECFollowers\",  )");
+        var arrayValue = result.ShouldBeOfType<ArrayValue>();
+        arrayValue.Elements.Count.ShouldBe(1);
+        arrayValue.Elements[0].ShouldBeOfType<TerminalValue>().Text.ShouldBe("\"SpectrumMECFollowers\"");
+    }
 }
