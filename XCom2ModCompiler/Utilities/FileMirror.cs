@@ -19,7 +19,7 @@ public class RobocopyFileMirror : IFileMirrorParity
         _processRunner = processRunner;
     }
 
-    public async Task MirrorAsync(string source, string destination, string pattern, string[]? excludeFiles, string[]? excludeDirs, CancellationToken ct)
+    public async Task MirrorAsync(string source, string destination, string pattern = "*.*", string[]? excludeFiles = null, string[]? excludeDirs = null, CancellationToken ct = default(CancellationToken))
     {
         if (!Directory.Exists(source)) return;
 
@@ -38,7 +38,7 @@ public class RobocopyFileMirror : IFileMirrorParity
         await RunRobocopyAsync(args, source, destination, ct);
     }
 
-    public async Task MirrorWithArgsAsync(string source, string destination, string pattern, string args, CancellationToken ct)
+    public async Task MirrorWithArgsAsync(string source, string destination, string pattern = "*.*", string args = "/MIR /R:3 /W:5 /NFL /NDL /NJH /NJS /nc /ns /np", CancellationToken ct = default(CancellationToken))
     {
         if (!Directory.Exists(source)) return;
 
@@ -52,13 +52,16 @@ public class RobocopyFileMirror : IFileMirrorParity
 
         // Robocopy exit codes < 8 are generally success (1 = copied successfully, 0 = no change, etc)
         var exitCode = await _processRunner.RunProcessAsync("robocopy.exe", args, null, ct);
+        
+        Console.WriteLine($"Robocopy completed with exit code {exitCode} (source: {source}, dest: {destination})");
+        
         if (exitCode >= 8)
         {
             throw new Exception($"Robocopy failed with exit code {exitCode} when mirroring {source} to {destination}");
         }
     }
 
-    public Task CopyAsync(string source, string destination, bool overwrite, CancellationToken ct)
+    public Task CopyAsync(string source, string destination, bool overwrite = true, CancellationToken ct = default(CancellationToken))
     {
         if (File.Exists(source))
         {
@@ -72,7 +75,7 @@ public class RobocopyFileMirror : IFileMirrorParity
         return Task.CompletedTask;
     }
 
-    public Task DeleteAsync(string path, bool recursive, CancellationToken ct)
+    public Task DeleteAsync(string path, bool recursive = true, CancellationToken ct = default(CancellationToken))
     {
         if (Directory.Exists(path))
         {

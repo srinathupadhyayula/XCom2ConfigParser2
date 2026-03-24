@@ -26,11 +26,23 @@ public class ProcessRunner : IProcessRunner
 
         using var process = new Process { StartInfo = startInfo };
 
-        if (onOutput != null)
+        // Always attach handlers to consume output and prevent buffer deadlock,
+        // even if we don't have a handler to process the data.
+        // This is critical: if the buffer fills up and no one is reading, the process will hang.
+        process.OutputDataReceived += (sender, e) => 
         {
-            process.OutputDataReceived += (sender, e) => onOutput(e.Data);
-            process.ErrorDataReceived += (sender, e) => onOutput(e.Data);
-        }
+            if (onOutput != null && e.Data != null)
+            {
+                onOutput(e.Data);
+            }
+        };
+        process.ErrorDataReceived += (sender, e) => 
+        {
+            if (onOutput != null && e.Data != null)
+            {
+                onOutput(e.Data);
+            }
+        };
 
         process.Start();
 
