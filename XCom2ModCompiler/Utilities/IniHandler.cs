@@ -20,6 +20,13 @@ public class IniHandler
         _iniRoots = iniRoots;
     }
 
+    /// <summary>
+    /// Searches for the target XComEngine.ini file within the configured INI roots.
+    /// Uses a priority-based discovery mechanism:
+    /// 1. Files containing [X2ModCompiler.DependantPackages] or [UnrealEd.EditorEngine] are prioritized.
+    /// 2. If multiple candidates remain, files not containing "0Base" (mod-specific config) are preferred.
+    /// </summary>
+    /// <returns>The path to the target INI file, or null if not found.</returns>
     public string? FindTargetIni()
     {
         if (!string.IsNullOrEmpty(_targetFile)) return _targetFile;
@@ -81,7 +88,12 @@ public class IniHandler
     /// <summary>
     /// Prepares the INI for mod compilation.
     /// This is used for BOTH passes in the two-pass system to ensure environment stability.
+    /// Environment stability prevents Unreal from deleting binaries or re-compiling unnecessarily between runs.
     /// </summary>
+    /// <param name="originalContent">The current content of the INI.</param>
+    /// <param name="mainModName">The canonical name of the main mod.</param>
+    /// <param name="dependantPackages">The list of dependent mods to include in ModEditPackages.</param>
+    /// <returns>The modified INI content.</returns>
     public string PrepareModCompilationIni(string originalContent, string mainModName, List<string> dependantPackages)
     {
         var lines = originalContent.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None).ToList();
@@ -257,6 +269,11 @@ public class IniHandler
         }
     }
 
+    /// <summary>
+    /// Parses the [X2ModCompiler.DependantPackages] section to identify mods that require two-pass linkage.
+    /// </summary>
+    /// <param name="content">The INI content to parse.</param>
+    /// <returns>A list of dependent mod package names.</returns>
     public List<string> GetDependantPackages(string content)
     {
         var packages = new List<string>();
