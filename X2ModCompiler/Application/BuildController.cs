@@ -49,175 +49,32 @@ public class BuildController
     public async Task<BuildResult> InvokeBuildAsync(CancellationToken ct = default)
     {
         var sw = Stopwatch.StartNew();
-        var outputPaths = new List<string>();
         string? originalIniContent = null;
         string? targetIniPath = null;
         bool needsIniRestoration = false;
+        Steps.CompilationStep? compilationStep = null;
 
         try
         {
             PrintInfoHeader(string.Format(BuildConstants.BuildInProgressHeader, _options.ModName));
 
-            // Priority roots: 1. Mod's Config folder (for detection) 2. SDK's Config folder (as fallback)
-            var iniRoots = _options.IniRoots.Count > 0 ? _options.IniRoots : new List<string> { Path.Combine(_options.ProjectRoot, "Config"), Path.Combine(_options.SdkPath, "XComGame", "Config") };
-            var iniHandler = new IniHandler(_options.ProjectRoot, iniRoots, _loggerFactory.CreateLogger<IniHandler>());
+            // Initialize build context
+            (var iniHandler, originalIniContent, targetIniPath) = await InitializeBuildAsync(ct);
 
-            // Identify the target INI file for modification (Mod's INI file ONLY, per user requirement)
-            // Note: INI modification ONLY happens for two-pass compilation
-            targetIniPath = iniHandler.FindTargetIni();
-            
-            // Check if two-pass compilation will be needed before backing up INI
-            bool willNeedIniModification = false;
-            if (targetIniPath != null && File.Exists(targetIniPath))
-            {
-                var currentContent = await File.ReadAllTextAsync(targetIniPath, ct);
-                willNeedIniModification = iniHandler.IsTwoPassNeeded(currentContent) || _options.TwoPassCompilation;
-                
-                // Only backup INI if two-pass compilation is required
-                if (willNeedIniModification)
-                {
-                    originalIniContent = await File.ReadAllTextAsync(targetIniPath, ct);
-                    _logger.LogInformation(LogColors.Debug($"INI backup created for two-pass compilation: {Path.GetFileName(targetIniPath)}"));
-                    _logger.LogInformation(LogColors.PathInfo(targetIniPath));
-                }
-                else
-                {
-                    _logger.LogInformation(LogColors.Debug("Single-pass compilation - NO INI modification (build_common parity)."));
-                }
-            }
+            // Execute the pipeline
+            (var timings, var execCompilationStep) = await ExecutePipelineAsync(iniHandler, ct);
+            compilationStep = execCompilationStep;
 
-            var pipeline = new BuildPipeline(_loggerFactory.CreateLogger<BuildPipeline>());
-
-            // ============================================================
-            // BUILD PIPELINE - Exact parity with build_common.ps1
-            // ============================================================
-            
-            // 1. Prepare INI (TWO-PASS ONLY - modifies source INI BEFORE copying to staging)
-            // This ensures the modified INI is copied to staging by CopyModToSdkStep
-            if (!_options.ValidateConfig)
-            {
-                pipeline.AddStep(new Steps.PrepareIniStep(iniHandler, _options, _loggerFactory.CreateLogger<Steps.PrepareIniStep>()));
-            }
-
-            // 2. Regenerate ItemGroup (mimics _RegenerateItemGroup)
-            if (!_options.ValidateConfig)
-            {
-                pipeline.AddStep(new Steps.ProjectSyncStep(_services.ProjectSynchronizer, _loggerFactory.CreateLogger<Steps.ProjectSyncStep>()));
-            }
-
-            // 3. Clean Additional Mods (mimics _CleanAdditional)
-            if (!_options.ValidateConfig && _options.CleanMods.Count > 0)
-            {
-                pipeline.AddStep(new Steps.CleanAdditionalStep(_options, _loggerFactory.CreateLogger<Steps.CleanAdditionalStep>()));
-            }
-
-            // 4. Copy Mod to SDK (mimics _CopyModToSdk)
-            // NOW copies the MODIFIED INI to staging (since PrepareIniStep ran first)
-            if (!_options.ValidateConfig)
-            {
-                pipeline.AddStep(new Steps.CopyModToSdkStep(_loggerFactory.CreateLogger<Steps.CopyModToSdkStep>()));
-            }
-
-            // 5. Convert Localization (mimics _ConvertLocalization)
-            if (!_options.ValidateConfig)
-            {
-                pipeline.AddStep(new Steps.LocalizationStep(_loggerFactory.CreateLogger<Steps.LocalizationStep>()));
-            }
-
-            // 6. Copy Sources to SDK (mimics _CopyToSrc)
-            if (!_options.ValidateConfig)
-            {
-                pipeline.AddStep(new Steps.CopyToSrcStep(_loggerFactory.CreateLogger<Steps.CopyToSrcStep>()));
-            }
-
-            // 7. Run Pre-Make Hooks (mimics _RunPreMakeHooks)
-            if (!_options.ValidateConfig && _options.PreMakeHooks.Count > 0)
-            {
-                pipeline.AddStep(new Steps.PreMakeHooksStep(_options, _loggerFactory.CreateLogger<Steps.PreMakeHooksStep>()));
-            }
-
-            // 8. Check Clean Compiled (mimics _CheckCleanCompiled)
-            if (!_options.ValidateConfig)
-            {
-                pipeline.AddStep(new Steps.CheckCleanCompiledStep(_services.Tracker, _services.ScriptCleaner, _loggerFactory.CreateLogger<Steps.CheckCleanCompiledStep>()));
-            }
-
-            // 9. Script Compilation (mimics _RunMakeBase + _RunMakeMod)
-            Steps.CompilationStep? compilationStep = null;
-            if (!_options.ValidateConfig)
-            {
-                var receiver = new MakeOutputReceiver(new[] { _options.ModSrcRoot }.Concat(_options.IncludePaths).ToArray(), _loggerFactory.CreateLogger<MakeOutputReceiver>());
-                compilationStep = new Steps.CompilationStep(_services.Compiler, receiver, _loggerFactory.CreateLogger<Steps.CompilationStep>());
-                pipeline.AddStep(compilationStep);
-            }
-
-            // 10. Copy Script Packages (mimics _CopyScriptPackages)
-            if (!_options.ValidateConfig && !_options.CompileOnly)
-            {
-                pipeline.AddStep(new Steps.CopyScriptPackagesStep(_loggerFactory.CreateLogger<Steps.CopyScriptPackagesStep>()));
-            }
-
-            // 11. Asset Processing (mimics _PrecompileShaders + _RunCookAssets + _CopyMissingUncooked)
-            // Note: Shader step MUST happen before cooking - precompiler gets confused by inlined materials
-            if (!(_options.CompileOnly || _options.ValidateConfig))
-            {
-                var contentOptions = LoadContentOptions();
-                pipeline.AddStep(new Steps.ShaderStep(_services.ShaderPrecompiler, _loggerFactory.CreateLogger<Steps.ShaderStep>()));
-                pipeline.AddStep(new Steps.CookingStep(_services.Cooker, contentOptions, _loggerFactory.CreateLogger<Steps.CookingStep>()));
-                pipeline.AddStep(new Steps.UncookedCopyStep(_services.MissingUncookedCopier, contentOptions, _loggerFactory.CreateLogger<Steps.UncookedCopyStep>()));
-            }
-
-            // 12. Final Copy (mimics _FinalCopy)
-            if (!(_options.CompileOnly || _options.ValidateConfig))
-            {
-                pipeline.AddStep(new Steps.FinalCopyStep(_loggerFactory.CreateLogger<Steps.FinalCopyStep>()));
-            }
-
-            // 13. Script Cleanup (mimics _CleanLeftoverScripts)
-            if (!(_options.CompileOnly || _options.ValidateConfig) && !_options.Debug)
-            {
-                pipeline.AddStep(new Steps.ScriptCleanupStep(_loggerFactory.CreateLogger<Steps.ScriptCleanupStep>()));
-            }
-
-            // 14. Optional Validation (C# only - not in build_common)
-            if (_options.ValidateConfig)
-            {
-                pipeline.AddStep(new Steps.ValidationStep(_services.FileProcessor, _loggerFactory.CreateLogger<Steps.ValidationStep>()));
-            }
-
-            _logger.LogDebug($"Build pipeline initialized with {pipeline.GetStepCount()} steps.");
-
-            var timings = await pipeline.ExecuteAsync(_options, ct);
-
-            // Determine if INI restoration is needed (for both single-pass and two-pass)
-            // Single-pass: INI was modified by PrepareIniStep
-            // Two-pass: INI was modified by CompilationStep
-            needsIniRestoration = willNeedIniModification || (compilationStep?.UsedTwoPass == true);
+            // Finalize and create result
+            needsIniRestoration = await FinalizeBuildAsync(timings, compilationStep, ct);
 
             sw.Stop();
             bool success = timings.All(t => t.Status == "SUCCESS");
-            
+
             if (success)
             {
-                var globalsHash = BuildTracker.ComputeFileHash(Path.Combine(_options.SdkPath, "XComGame", "Config", "Globals.uci"));
-                var coreTimestamp = File.Exists(Path.Combine(_options.SdkPath, "XComGame", "Script", "Core.u"))
-                    ? File.GetLastWriteTime(Path.Combine(_options.SdkPath, "XComGame", "Script", "Core.u"))
-                    : DateTime.MinValue;
-
-                var fingerprint = new BuildFingerprint(
-                    _options.Debug ? "debug" : "release",
-                    globalsHash,
-                    coreTimestamp,
-                    DateTime.UtcNow,
-                    new Dictionary<string, DateTime>(),
-                    new Dictionary<string, DateTime>()
-                );
-
-                await _services.Tracker.SaveFingerprintAsync(fingerprint, ct);
-
-                // Record Core timestamp after successful build (mod package timestamps are recorded by CompilationStep)
+                await RecordBuildFingerprintAsync(ct);
                 await _services.Tracker.RecordCoreTimestampAsync(_options.SdkPath, ct);
-
                 PrintSuccessHeader(BuildConstants.BuildSuccessHeader);
             }
             else PrintErrorHeader(BuildConstants.BuildFailureHeader);
@@ -227,7 +84,7 @@ public class BuildController
             return new BuildResult(
                 success,
                 sw.Elapsed,
-                outputPaths,
+                new List<string>(),
                 errors,
                 timings);
         }
@@ -237,29 +94,209 @@ public class BuildController
             _logger.LogError(LogColors.Error("Build pipeline aborted due to unhandled exception"));
             _logger.LogError(ex.Message);
             return new BuildResult(
-                false, 
-                sw.Elapsed, 
-                outputPaths, 
-                new List<string> { ex.Message }, 
+                false,
+                sw.Elapsed,
+                new List<string>(),
+                new List<string> { ex.Message },
                 new List<BuildTimingRecord>());
         }
         finally
         {
-            // INI Restoration: Only for two-pass builds where INI was modified
-            // Single-pass builds have NO INI modification (build_common parity)
+            // INI Restoration
             if (needsIniRestoration && originalIniContent != null && targetIniPath != null)
             {
-                _logger.LogInformation(LogColors.Info($"Restoring {Path.GetFileName(targetIniPath)} to original state..."));
-                try
-                {
-                    await File.WriteAllTextAsync(targetIniPath, originalIniContent, ct);
-                    _logger.LogInformation(LogColors.Success($"{Path.GetFileName(targetIniPath)} restoration complete."));
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(LogColors.Error($"Failed to restore {Path.GetFileName(targetIniPath)}: {ex.Message}"));
-                }
+                await RestoreIniAsync(targetIniPath, originalIniContent, ct);
             }
+        }
+    }
+
+    /// <summary>
+    /// Initializes the build context including INI handler and backup.
+    /// </summary>
+    private async Task<(IniHandler handler, string? originalIniContent, string? targetIniPath)> InitializeBuildAsync(CancellationToken ct)
+    {
+        string? originalIniContent = null;
+        
+        // Priority roots: 1. Mod's Config folder (for detection) 2. SDK's Config folder (as fallback)
+        var iniRoots = _options.IniRoots.Count > 0 ? _options.IniRoots : new List<string> { Path.Combine(_options.ProjectRoot, "Config"), Path.Combine(_options.SdkPath, "XComGame", "Config") };
+        var iniHandler = new IniHandler(_options.ProjectRoot, iniRoots, _loggerFactory.CreateLogger<IniHandler>());
+
+        // Identify the target INI file for modification
+        var targetIniPath = iniHandler.FindTargetIni();
+
+        // Check if two-pass compilation will be needed and backup INI if required
+        if (targetIniPath != null && File.Exists(targetIniPath))
+        {
+            var currentContent = await File.ReadAllTextAsync(targetIniPath, ct);
+            var willNeedIniModification = iniHandler.IsTwoPassNeeded(currentContent) || _options.TwoPassCompilation;
+
+            if (willNeedIniModification)
+            {
+                originalIniContent = await File.ReadAllTextAsync(targetIniPath, ct);
+                _logger.LogInformation(LogColors.Debug($"INI backup created for two-pass compilation: {Path.GetFileName(targetIniPath)}"));
+                _logger.LogInformation(LogColors.PathInfo(targetIniPath));
+            }
+            else
+            {
+                _logger.LogInformation(LogColors.Debug("Single-pass compilation - NO INI modification (build_common parity)."));
+            }
+        }
+
+        return (iniHandler, originalIniContent, targetIniPath);
+    }
+
+    /// <summary>
+    /// Executes the build pipeline with all steps.
+    /// </summary>
+    private async Task<(List<BuildTimingRecord> timings, Steps.CompilationStep? compilationStep)> ExecutePipelineAsync(IniHandler iniHandler, CancellationToken ct)
+    {
+        var pipeline = new BuildPipeline(_loggerFactory.CreateLogger<BuildPipeline>());
+        Steps.CompilationStep? compilationStep = null;
+
+        // ============================================================
+        // BUILD PIPELINE - Exact parity with build_common.ps1
+        // ============================================================
+
+        // 1. Prepare INI (TWO-PASS ONLY)
+        if (!_options.ValidateConfig)
+        {
+            pipeline.AddStep(new Steps.PrepareIniStep(iniHandler, _options, _loggerFactory.CreateLogger<Steps.PrepareIniStep>()));
+        }
+
+        // 2. Regenerate ItemGroup
+        if (!_options.ValidateConfig)
+        {
+            pipeline.AddStep(new Steps.ProjectSyncStep(_services.ProjectSynchronizer, _loggerFactory.CreateLogger<Steps.ProjectSyncStep>()));
+        }
+
+        // 3. Clean Additional Mods
+        if (!_options.ValidateConfig && _options.CleanMods.Count > 0)
+        {
+            pipeline.AddStep(new Steps.CleanAdditionalStep(_options, _loggerFactory.CreateLogger<Steps.CleanAdditionalStep>()));
+        }
+
+        // 4. Copy Mod to SDK
+        if (!_options.ValidateConfig)
+        {
+            pipeline.AddStep(new Steps.CopyModToSdkStep(_loggerFactory.CreateLogger<Steps.CopyModToSdkStep>()));
+        }
+
+        // 5. Convert Localization
+        if (!_options.ValidateConfig)
+        {
+            pipeline.AddStep(new Steps.LocalizationStep(_loggerFactory.CreateLogger<Steps.LocalizationStep>()));
+        }
+
+        // 6. Copy Sources to SDK
+        if (!_options.ValidateConfig)
+        {
+            pipeline.AddStep(new Steps.CopyToSrcStep(_loggerFactory.CreateLogger<Steps.CopyToSrcStep>()));
+        }
+
+        // 7. Run Pre-Make Hooks
+        if (!_options.ValidateConfig && _options.PreMakeHooks.Count > 0)
+        {
+            pipeline.AddStep(new Steps.PreMakeHooksStep(_options, _loggerFactory.CreateLogger<Steps.PreMakeHooksStep>()));
+        }
+
+        // 8. Check Clean Compiled
+        if (!_options.ValidateConfig)
+        {
+            pipeline.AddStep(new Steps.CheckCleanCompiledStep(_services.Tracker, _services.ScriptCleaner, _loggerFactory.CreateLogger<Steps.CheckCleanCompiledStep>()));
+        }
+
+        // 9. Script Compilation
+        if (!_options.ValidateConfig)
+        {
+            var receiver = new MakeOutputReceiver(new[] { _options.ModSrcRoot }.Concat(_options.IncludePaths).ToArray(), _loggerFactory.CreateLogger<MakeOutputReceiver>());
+            compilationStep = new Steps.CompilationStep(_services.Compiler, receiver, _loggerFactory.CreateLogger<Steps.CompilationStep>());
+            pipeline.AddStep(compilationStep);
+        }
+
+        // 10. Copy Script Packages
+        if (!_options.ValidateConfig && !_options.CompileOnly)
+        {
+            pipeline.AddStep(new Steps.CopyScriptPackagesStep(_loggerFactory.CreateLogger<Steps.CopyScriptPackagesStep>()));
+        }
+
+        // 11. Asset Processing
+        if (!(_options.CompileOnly || _options.ValidateConfig))
+        {
+            var contentOptions = LoadContentOptions();
+            pipeline.AddStep(new Steps.ShaderStep(_services.ShaderPrecompiler, _loggerFactory.CreateLogger<Steps.ShaderStep>()));
+            pipeline.AddStep(new Steps.CookingStep(_services.Cooker, contentOptions, _loggerFactory.CreateLogger<Steps.CookingStep>()));
+            pipeline.AddStep(new Steps.UncookedCopyStep(_services.MissingUncookedCopier, contentOptions, _loggerFactory.CreateLogger<Steps.UncookedCopyStep>()));
+        }
+
+        // 12. Final Copy
+        if (!(_options.CompileOnly || _options.ValidateConfig))
+        {
+            pipeline.AddStep(new Steps.FinalCopyStep(_loggerFactory.CreateLogger<Steps.FinalCopyStep>()));
+        }
+
+        // 13. Script Cleanup
+        if (!(_options.CompileOnly || _options.ValidateConfig) && !_options.Debug)
+        {
+            pipeline.AddStep(new Steps.ScriptCleanupStep(_loggerFactory.CreateLogger<Steps.ScriptCleanupStep>()));
+        }
+
+        // 14. Optional Validation
+        if (_options.ValidateConfig)
+        {
+            pipeline.AddStep(new Steps.ValidationStep(_services.FileProcessor, _loggerFactory.CreateLogger<Steps.ValidationStep>()));
+        }
+
+        _logger.LogDebug($"Build pipeline initialized with {pipeline.GetStepCount()} steps.");
+
+        var timings = await pipeline.ExecuteAsync(_options, ct);
+        return (timings, compilationStep);
+    }
+
+    /// <summary>
+    /// Finalizes the build including fingerprint recording and INI restoration flag.
+    /// </summary>
+    private async Task<bool> FinalizeBuildAsync(List<BuildTimingRecord> timings, Steps.CompilationStep? compilationStep, CancellationToken ct)
+    {
+        // Determine if INI restoration is needed
+        return compilationStep?.UsedTwoPass == true;
+    }
+
+    /// <summary>
+    /// Records the build fingerprint after successful completion.
+    /// </summary>
+    private async Task RecordBuildFingerprintAsync(CancellationToken ct)
+    {
+        var globalsHash = BuildTracker.ComputeFileHash(Path.Combine(_options.SdkPath, "XComGame", "Config", "Globals.uci"));
+        var coreTimestamp = File.Exists(Path.Combine(_options.SdkPath, "XComGame", "Script", "Core.u"))
+            ? File.GetLastWriteTime(Path.Combine(_options.SdkPath, "XComGame", "Script", "Core.u"))
+            : DateTime.MinValue;
+
+        var fingerprint = new BuildFingerprint(
+            _options.Debug ? "debug" : "release",
+            globalsHash,
+            coreTimestamp,
+            DateTime.UtcNow,
+            new Dictionary<string, DateTime>(),
+            new Dictionary<string, DateTime>()
+        );
+
+        await _services.Tracker.SaveFingerprintAsync(fingerprint, ct);
+    }
+
+    /// <summary>
+    /// Restores the INI file to its original state.
+    /// </summary>
+    private async Task RestoreIniAsync(string targetIniPath, string originalIniContent, CancellationToken ct)
+    {
+        _logger.LogInformation(LogColors.Info($"Restoring {Path.GetFileName(targetIniPath)} to original state..."));
+        try
+        {
+            await File.WriteAllTextAsync(targetIniPath, originalIniContent, ct);
+            _logger.LogInformation(LogColors.Success($"{Path.GetFileName(targetIniPath)} restoration complete."));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(LogColors.Error($"Failed to restore {Path.GetFileName(targetIniPath)}: {ex.Message}"));
         }
     }
 
