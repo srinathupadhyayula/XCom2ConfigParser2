@@ -8,14 +8,10 @@ using X2ModCompiler.Exceptions;
 
 namespace X2ModCompiler.Cooking;
 
-
-/// <summary>
-/// Asset cooking step - mirrors PowerShell ModAssetsCookStep class.
-/// Handles the complete asset cooking pipeline with incremental support.
-/// </summary>
 /// <summary>
 /// Implements the core asset cooking pipeline for XCOM 2 mods, providing parity with the original PowerShell ModAssetsCookStep.
 /// This class handles incremental cooking, SDK environment preparation, and performance tracking for TFC and SF packages.
+/// Uses extracted helper classes (SdkEnvironmentVerifier, TfcManager, CollectionMapCooker) for better separation of concerns.
 /// </summary>
 public class ModAssetsCookStep
 {
@@ -27,11 +23,13 @@ public class ModAssetsCookStep
     private readonly string _stagingPath;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<ModAssetsCookStep> _logger;
+    
+    // Extracted helper classes
+    private readonly SdkEnvironmentVerifier _verifier;
+    private readonly TfcManager _tfcManager;
+    private readonly CollectionMapCooker _mapCooker;
 
-    private string _actualTfcSuffix = "";
     private string _contentForCookPath = "";
-    private string _collectionMapsPath = "";
-    private string _sdkContentModsDir = "";
     private string _sdkContentModsOurDir = "";
     private List<string> _dirtyMaps = new();
     private List<string> _cookedMaps = new();
@@ -51,6 +49,7 @@ public class ModAssetsCookStep
     /// <param name="runner">The process runner for commandlet invocation.</param>
     /// <param name="mirror">The file mirroring service for resource syncing.</param>
     /// <param name="tracker">The build tracker for change detection.</param>
+    /// <param name="loggerFactory">The logger factory for creating loggers.</param>
     /// <param name="logger">The logger for internal diagnostics.</param>
     public ModAssetsCookStep(
         BuildOptions project,
@@ -70,6 +69,11 @@ public class ModAssetsCookStep
         _tracker = tracker;
         _loggerFactory = loggerFactory;
         _logger = logger;
+        
+        // Initialize extracted helper classes
+        _verifier = new SdkEnvironmentVerifier(project);
+        _tfcManager = new TfcManager(project, _cookerOutputTracker, loggerFactory.CreateLogger<TfcManager>());
+        _mapCooker = new CollectionMapCooker(project, contentOptions, loggerFactory.CreateLogger<CollectionMapCooker>());
     }
 
     /// <summary>
@@ -87,7 +91,9 @@ public class ModAssetsCookStep
 
         _logger.LogInformation("Initializing assets cooking");
         Init();
-        VerifyProjectAndSdk();
+        _verifier.VerifyContentForCookExists();
+        _verifier.VerifySdkContentModsDirectoryEmpty();
+        _verifier.VerifyShippedGpcdExists();
 
         _logger.LogInformation("Preparing assets cooking");
         await PrepareSdkFoldersAsync(ct);
@@ -122,11 +128,8 @@ public class ModAssetsCookStep
     /// </summary>
     private void Init()
     {
-        _actualTfcSuffix = $"_{_project.ModNameCanonical}_DLCTFC_XPACK_";
         _contentForCookPath = Path.Combine(_project.ModSrcRoot, "ContentForCook");
-        _collectionMapsPath = Path.Combine(_project.BuildCachePath, "CollectionMaps");
-        _sdkContentModsDir = Path.Combine(_project.SdkPath, "XComGame", "Content", "Mods");
-        _sdkContentModsOurDir = Path.Combine(_sdkContentModsDir, _project.ModNameCanonical);
+        _sdkContentModsOurDir = Path.Combine(_project.SdkPath, "XComGame", "Content", "Mods", _project.ModNameCanonical);
 
         _cookedMaps = new List<string>(_contentOptions.SfMaps);
         foreach (var mapDef in _contentOptions.SfCollectionMaps)
@@ -134,17 +137,8 @@ public class ModAssetsCookStep
             _cookedMaps.Add(mapDef.Name);
         }
 
-        _sfCollectionOnlyMaps = new List<string>();
-        foreach (var mapDef in _contentOptions.SfCollectionMaps)
-        {
-            var map = mapDef.Name;
-            var found = Directory.GetFiles(_contentForCookPath, $"{map}.umap", SearchOption.AllDirectories)
-                .Any();
-            if (!found)
-            {
-                _sfCollectionOnlyMaps.Add(map);
-            }
-        }
+        // Use CollectionMapCooker to identify collection-only maps
+        _sfCollectionOnlyMaps = _mapCooker.GetSfCollectionOnlyMaps(_contentForCookPath);
 
         _cookerOutputTrackerPath = Path.Combine(_project.BuildCachePath, "AssetsCookerOutputTracker.json");
         if (File.Exists(_cookerOutputTrackerPath))
@@ -159,47 +153,15 @@ public class ModAssetsCookStep
     }
 
     /// <summary>
-    /// Validates that the project source and SDK environment are in a consistent state for cooking.
-    /// </summary>
-    /// <exception cref="BuildFailureException">Thrown if core directories or artifacts are missing.</exception>
-    private void VerifyProjectAndSdk()
-    {
-        if (!Directory.Exists(_contentForCookPath))
-        {
-            throw new BuildFailureException("Asset cooking", 1);
-        }
-
-        if (Directory.Exists(_sdkContentModsOurDir))
-        {
-            if (Directory.GetFiles(_sdkContentModsOurDir, "*", SearchOption.AllDirectories).Any())
-            {
-                throw new Exception($"{_sdkContentModsOurDir} is already in use (not empty)");
-            }
-        }
-
-        var shippedGpcdPath = Path.Combine(_project.SdkPath, "XComGame", "CookedPCConsole", "GlobalPersistentCookerData.upk");
-        if (!File.Exists(shippedGpcdPath))
-        {
-            throw new Exception($"{shippedGpcdPath} does not exist. Please verify your SDK is configured correctly");
-        }
-    }
-
-    /// <summary>
     /// Prepares the local build cache by creating temporary collection maps.
     /// </summary>
     private async Task PrepareProjectCacheAsync()
     {
-        if (Directory.Exists(_collectionMapsPath))
-        {
-            Directory.Delete(_collectionMapsPath, true);
-        }
-        Directory.CreateDirectory(_collectionMapsPath);
-
-        foreach (var map in _sfCollectionOnlyMaps)
-        {
-            var destPath = Path.Combine(_collectionMapsPath, $"{map}.umap");
-            await ExtractEmptyUMapAsync(destPath);
-        }
+        // Use CollectionMapCooker to initialize collection maps path
+        _mapCooker.InitializeCollectionMapsPath();
+        
+        // Create temporary collection maps for collection-only maps
+        await _mapCooker.CreateTemporaryCollectionMapsAsync(_sfCollectionOnlyMaps);
     }
 
     /// <summary>
@@ -211,7 +173,7 @@ public class ModAssetsCookStep
         if (!CheckCachedTfcsNotAltered())
         {
             _logger.LogInformation("Performing a full recook");
-            CleanModAssetCookerOutput(_project.SdkPath, _project.ModNameCanonical, new[] { _contentForCookPath, _collectionMapsPath });
+            CleanModAssetCookerOutput(_project.SdkPath, _project.ModNameCanonical, new[] { _contentForCookPath, _mapCooker.GetCollectionMapsPath() });
 
             _cookerOutputTracker.TfcFiles.Clear();
             RecordCookerOutputTracker();
@@ -387,11 +349,11 @@ public class ModAssetsCookStep
 
         lines.Add("[Core.System]");
         lines.Add($"+Paths={_contentForCookPath}");
-        lines.Add("-Paths=..\\..\\XComGame\\Content\\Mods"); 
+        lines.Add("-Paths=..\\..\\XComGame\\Content\\Mods");
 
         if (_sfCollectionOnlyMaps.Count > 0)
         {
-            lines.Add($"+Paths={_collectionMapsPath}");
+            lines.Add($"+Paths={_mapCooker.GetCollectionMapsPath()}");
         }
 
         lines.Add("[Engine.X2DirectoriesToSkipEnumeration]");
@@ -545,28 +507,12 @@ public class ModAssetsCookStep
     /// </summary>
     private void WarnTfcGrowth()
     {
-        var tfcs = GetOurTfcFiles();
-        var growthEntries = new List<object>();
-
-        foreach (var file in tfcs)
-        {
-            var trackedFileData = GetTfcTrackerData(file.Name);
-            if (trackedFileData == null) continue; 
-            if (file.Length == trackedFileData.OriginalSize) continue;
-
-            var increase = (double)file.Length / trackedFileData.OriginalSize;
-            growthEntries.Add(new
-            {
-                Name = file.Name,
-                OriginalSize = BuildUtilities.FormatFileSize(trackedFileData.OriginalSize),
-                CurrentSize = BuildUtilities.FormatFileSize(file.Length),
-                Increase = $"{increase:F2}x"
-            });
-        }
-
+        var growthEntries = _tfcManager.CheckTfcGrowth();
+        
         if (growthEntries.Count > 0)
         {
-            _logger.LogInformation(TableFormatter.Format(growthEntries));
+            var report = _tfcManager.FormatGrowthReport(growthEntries);
+            _logger.LogInformation(report);
             _logger.LogInformation("WARNING: TFC files grew since initial creation. This could indicate data duplication.");
             _logger.LogInformation("Your mod will still function normally, but the file size might be larger than needed");
             _logger.LogInformation("You should consider doing a full rebuild before distributing your mod.");
@@ -666,14 +612,12 @@ public class ModAssetsCookStep
     }
 
     /// <summary>
-    /// Retrieves all TFC files generated for the current mod project in the SDK cooker output directory.
+    /// Retrieves all TFC files generated for the current mod in the cooker output directory.
     /// </summary>
-    /// <returns>An array of <see cref="FileInfo"/> objects for the mod's TFC files.</returns>
+    /// <returns>An array of FileInfo objects for the mod's TFC files.</returns>
     private FileInfo[] GetOurTfcFiles()
     {
-        return Directory.GetFiles(_project.CookerOutputPath, $"*{_actualTfcSuffix}.tfc")
-            .Select(f => new FileInfo(f))
-            .ToArray();
+        return _tfcManager.GetOurTfcFiles();
     }
 
     /// <summary>
@@ -692,7 +636,7 @@ public class ModAssetsCookStep
     /// </summary>
     private TfcFileData? GetTfcTrackerData(string fullFileName)
     {
-        return _cookerOutputTracker.TfcFiles.FirstOrDefault(f => f.FullFileName == fullFileName);
+        return _tfcManager.GetTfcTrackerData(fullFileName);
     }
 
     /// <summary>
