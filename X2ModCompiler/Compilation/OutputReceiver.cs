@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using ZLogger;
 using X2ModCompiler.Exceptions;
 using X2ModCompiler.Utilities;
+using Kokuban;
 
 namespace X2ModCompiler.Compilation;
 
@@ -64,7 +65,7 @@ public class PassthroughReceiver : OutputReceiver
         base.ParseLine(line);
         if (line != null)
         {
-            _logger.ZLogInformation($"{line}");
+            _logger.LogInformation(LogColors.Info(line));
         }
     }
 }
@@ -92,10 +93,21 @@ public class BufferingReceiver : OutputReceiver
     {
         if (exitCode != 0 || CrashDetected)
         {
-            // Display all buffered lines on failure
+            // Display all buffered lines on failure with coloring
             foreach (var line in _logLines)
             {
-                _logger.ZLogInformation($"{line}");
+                if (line.Contains("Error", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogError(LogColors.Error(line));
+                }
+                else if (line.Contains("Warning", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning(LogColors.Warning(line));
+                }
+                else
+                {
+                    _logger.LogInformation(LogColors.Info(line));
+                }
             }
         }
         base.Finish(exitCode);
@@ -115,7 +127,7 @@ public class ModcookReceiver : OutputReceiver
     public override void ParseLine(string? line)
     {
         base.ParseLine(line);
-        
+
         if (line == null) return;
 
         var permitLine = true;
@@ -125,7 +137,7 @@ public class ModcookReceiver : OutputReceiver
             permitLine = false;
             if (!_lastLineWasAdding)
             {
-                _logger.ZLogInformation($"[GFx movie packages ...]");
+                _logger.LogInformation(LogColors.Progress("[GFx movie packages ...]"));
             }
             _lastLineWasAdding = true;
         }
@@ -136,7 +148,23 @@ public class ModcookReceiver : OutputReceiver
 
         if (permitLine)
         {
-            _logger.ZLogInformation($"{line}");
+            // Apply color coding based on line content
+            if (line.Contains("Error", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogError(LogColors.Error(line));
+            }
+            else if (line.Contains("Warning", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(LogColors.Warning(line));
+            }
+            else if (line.Contains("Success", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation(LogColors.Success(line));
+            }
+            else
+            {
+                _logger.LogInformation(LogColors.Info(line));
+            }
         }
     }
 }
@@ -201,28 +229,28 @@ public class MakeOutputReceiver : OutputReceiver
         // Summary pattern check
         var summaryPattern = @"^(Success|Failure) - ([0-9]+) error\(s\), ([0-9]+) warning\(s\) \(([0-9]+) Unique Errors, ([0-9]+) Unique Warnings\)";
         var summaryMatch = Regex.Match(line, summaryPattern);
-        
+
         if (isError)
         {
-            _logger.ZLogInformation($"{line}");
+            _logger.LogError(LogColors.Error(line));
         }
         else if (line.Contains("Warning", StringComparison.OrdinalIgnoreCase))
         {
-            _logger.ZLogWarning($"{line}");
+            _logger.LogWarning(LogColors.Warning(line));
         }
         else if (summaryMatch.Success)
         {
             var numErr = int.Parse(summaryMatch.Groups[2].Value);
             if (numErr > 0)
-                _logger.ZLogError($"{line}");
+                _logger.LogError(LogColors.Error(line));
             else if (int.Parse(summaryMatch.Groups[3].Value) > 0)
-                _logger.ZLogWarning($"{line}");
+                _logger.LogWarning(LogColors.Warning(line));
             else
-                _logger.ZLogInformation($"{line}");
+                _logger.LogInformation(LogColors.Success(line));
         }
         else
         {
-            _logger.ZLogInformation($"{line}");
+            _logger.LogInformation(LogColors.Info(line));
         }
     }
 
