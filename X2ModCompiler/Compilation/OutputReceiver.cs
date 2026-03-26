@@ -11,6 +11,9 @@ public abstract class OutputReceiver
     protected readonly ILogger _logger;
     public bool CrashDetected { get; protected set; }
     public string ProcessDescription { get; set; } = "";
+    
+    // Buffer for analyzing output (used by two-pass compilation)
+    protected readonly List<string> _outputBuffer = new();
 
     protected OutputReceiver(ILogger logger)
     {
@@ -19,10 +22,24 @@ public abstract class OutputReceiver
 
     public virtual void ParseLine(string? line)
     {
+        if (line != null)
+        {
+            _outputBuffer.Add(line);
+        }
+        
         if (line != null && line.Contains("Crash", StringComparison.OrdinalIgnoreCase) && line.Contains("Exception", StringComparison.OrdinalIgnoreCase))
         {
             CrashDetected = true;
         }
+    }
+
+    /// <summary>
+    /// Checks if the output buffer contains the specified text.
+    /// Used by two-pass compilation to analyze error messages.
+    /// </summary>
+    public bool OutputContains(string searchText)
+    {
+        return _outputBuffer.Any(line => line.Contains(searchText, StringComparison.OrdinalIgnoreCase));
     }
 
     public virtual void Finish(int exitCode)

@@ -75,6 +75,15 @@ public class CompilationStep : IBuildStep
         _logger.LogInformation(Chalk.Bold.Yellow["PHASE 1: INITIAL COMPILATION (Building base and all mod packages)"]);
         bool phase1Success = await ExecuteCompilationPassAsync(options, 1, dependentPackages, ct);
 
+        // Determine if Phase 2 should run based on Phase 1 output
+        bool shouldRunPhase2 = ShouldRunPhase2(phase1Success, dependentPackages, options);
+
+        if (!shouldRunPhase2)
+        {
+            _logger.LogError(Chalk.Red["Phase 1 failed with non-linkage errors - aborting Phase 2."]);
+            return false;
+        }
+
         // Pass 2 - NO INI modification, just compile
         _logger.LogInformation(Chalk.Bold.Yellow["PHASE 2: FINAL LINKAGE (Resolving cross-package dependencies)"]);
         if (!await ExecuteCompilationPassAsync(options, 2, dependentPackages, ct))
@@ -83,6 +92,52 @@ public class CompilationStep : IBuildStep
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Determines if Phase 2 should run based on Phase 1 compilation results.
+    /// Phase 2 runs ONLY if:
+    /// - Phase 1 succeeded, OR
+    /// - Phase 1 failed with linkage errors (dependent package not found) AND:
+    ///   - All dependent packages compiled (seen in output)
+    ///   - Main mod .u was generated (linkage failure, not compilation failure)
+    /// </summary>
+    private bool ShouldRunPhase2(bool phase1Success, List<string> dependentPackages, BuildOptions options)
+    {
+        // If Phase 1 succeeded, no need for Phase 2 (but we still run it for completeness)
+        if (phase1Success)
+        {
+            _logger.LogInformation(Chalk.Gray["Phase 1 succeeded - running Phase 2 for completeness."]);
+            return true;
+        }
+
+        // Phase 1 failed - check if it's a linkage failure (expected for two-pass)
+        // Condition 1: Look for the specific linkage error pattern
+        var linkageErrorFound = _receiver.OutputContains("Could not load existing package file");
+        
+        // Condition 2: All dependent packages were compiled (seen in output)
+        var dependentPackagesCompiled = dependentPackages.All(pkg => 
+            _receiver.OutputContains($"--------------------{pkg}"));
+        
+        // Condition 3: Main mod .u was generated (proves compilation succeeded, only linkage failed)
+        var mainModBinaryExists = File.Exists(Path.Combine(options.SdkPath, "XComGame", "Script", $"{options.ModNameCanonical}.u"));
+        
+        if (linkageErrorFound && dependentPackagesCompiled && mainModBinaryExists)
+        {
+            _logger.LogInformation(Chalk.Cyan["Linkage error detected - Phase 2 will resolve cross-package dependencies."]);
+            return true;
+        }
+
+        // Other errors (syntax, missing sources, etc.) - do NOT run Phase 2
+        _logger.LogWarning(Chalk.Yellow["Phase 1 failed with non-linkage errors."]);
+        if (!linkageErrorFound)
+            _logger.LogWarning(Chalk.Gray["  - No linkage error message found."]);
+        if (!dependentPackagesCompiled)
+            _logger.LogWarning(Chalk.Gray["  - Not all dependent packages were compiled."]);
+        if (!mainModBinaryExists)
+            _logger.LogWarning(Chalk.Gray["  - Main mod .u file was not generated."]);
+        
+        return false;
     }
 
     private async Task<bool> ExecuteCompilationPassAsync(BuildOptions options, int passNumber, List<string> dependentPackages, CancellationToken ct)
