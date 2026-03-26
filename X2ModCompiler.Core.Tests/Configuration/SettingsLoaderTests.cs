@@ -112,8 +112,8 @@ public class SettingsLoaderTests : TestBase
         var loader = new SettingsLoader(temp.Path, _logger);
         var settings = loader.Load();
 
-        settings.CommunityHighlanderPath.ShouldContain("CommunityHighlander");
-        settings.AlienHighlanderPath.ShouldContain("AlienHighlander");
+        settings.CommunityHighlanderPath!.ShouldContain("CommunityHighlander");
+        settings.AlienHighlanderPath!.ShouldContain("AlienHighlander");
     }
 
     [Fact]
@@ -161,8 +161,8 @@ public class SettingsLoaderTests : TestBase
         var loader = new SettingsLoader(temp.Path, _logger);
         var settings = loader.Load();
 
-        settings.SdkRoot.ShouldContain("Steam");
-        settings.SdkRoot.ShouldContain("XCOM2");
+        settings.SdkRoot!.ShouldContain("Steam");
+        settings.SdkRoot!.ShouldContain("XCOM2");
     }
 
     [Fact]
@@ -179,8 +179,8 @@ public class SettingsLoaderTests : TestBase
         var loader = new SettingsLoader(temp.Path, _logger);
         var settings = loader.Load();
 
-        settings.CommunityHighlanderPath.ShouldContain(homeDir);
-        settings.CommunityHighlanderPath.ShouldContain("CommunityHighlander");
+        settings.CommunityHighlanderPath!.ShouldContain(homeDir);
+        settings.CommunityHighlanderPath!.ShouldContain("CommunityHighlander");
     }
 
     [Fact]
@@ -207,7 +207,7 @@ public class SettingsLoaderTests : TestBase
         await using var temp = new TempDirectory();
         var vscodeDir = Path.Combine(temp.Path, ".vscode");
         Directory.CreateDirectory(vscodeDir);
-        await File.WriteAllTextAsync(Path.Combine(vscodeDir, "settings.json"), "{ invalid json }");
+        await File.WriteAllTextAsync(Path.Combine(vscodeDir, "settings.json"), "{ invalid json }", TestContext.Current.CancellationToken);
 
         var loader = new SettingsLoader(temp.Path, _logger);
         var settings = loader.Load();
@@ -227,7 +227,7 @@ public class SettingsLoaderTests : TestBase
             $builder.IncludeSrc("../CommunityHighlander/Src")
             $builder.IncludeSrc("../AlienHighlander/Src")
             # $builder.IncludeSrc("../CommentedOut/Src")
-            """);
+            """, TestContext.Current.CancellationToken);
 
         WriteSettingsJson(temp.Path, """
         {
@@ -251,7 +251,7 @@ public class SettingsLoaderTests : TestBase
         Directory.CreateDirectory(buildScriptDir);
         await File.WriteAllTextAsync(Path.Combine(buildScriptDir, "build.ps1"), """
             $builder.IncludeSrc("../FromBuildScript/Src")
-            """);
+            """, TestContext.Current.CancellationToken);
 
         WriteSettingsJson(temp.Path, """
         {

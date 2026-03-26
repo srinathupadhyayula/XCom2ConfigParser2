@@ -24,7 +24,7 @@ public class StructDefinitionResolverTests : TestBase
         await using var temp = new TempDirectory();
         var cache = new StructCache(temp.Path);
         var tempFile = Path.Combine(temp.Path, "test.uc");
-        await File.WriteAllTextAsync(tempFile, "struct TestStruct { var int Field1; };");
+        await File.WriteAllTextAsync(tempFile, "struct TestStruct { var int Field1; };", TestContext.Current.CancellationToken);
 
         var cachedDef = new CachedStructDef
         {

@@ -148,7 +148,7 @@ public class StructIndexerTests : TestBase
         indexer.IndexAll(progress);
 
         // Give the Progress<T> callbacks time to fire (they are async)
-        await Task.Delay(100);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
 
         progressReports.ShouldNotBeEmpty();
         progressReports.All(p => p.FilesProcessed > 0).ShouldBeTrue();

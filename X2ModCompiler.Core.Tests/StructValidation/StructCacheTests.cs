@@ -31,7 +31,7 @@ public class StructCacheTests : TestBase
         await using var temp = new TempDirectory();
         var cache = new StructCache(temp.Path);
         var tempFile = Path.Combine(temp.Path, "test.uc");
-        await File.WriteAllTextAsync(tempFile, "test content");
+        await File.WriteAllTextAsync(tempFile, "test content", TestContext.Current.CancellationToken);
         string hash = ComputeHash(tempFile);
 
         var def = new CachedStructDef
@@ -85,7 +85,7 @@ public class StructCacheTests : TestBase
         await using var temp = new TempDirectory();
         var cache = new StructCache(temp.Path);
         var tempFile = Path.Combine(temp.Path, "temp.uc");
-        await File.WriteAllTextAsync(tempFile, "test content");
+        await File.WriteAllTextAsync(tempFile, "test content", TestContext.Current.CancellationToken);
 
         var def = new CachedStructDef
         {
@@ -111,7 +111,7 @@ public class StructCacheTests : TestBase
         await using var temp = new TempDirectory();
         var cache = new StructCache(temp.Path);
         var tempFile = Path.Combine(temp.Path, "temp.uc");
-        await File.WriteAllTextAsync(tempFile, "original content");
+        await File.WriteAllTextAsync(tempFile, "original content", TestContext.Current.CancellationToken);
 
         var def = new CachedStructDef
         {
@@ -125,7 +125,7 @@ public class StructCacheTests : TestBase
         };
 
         cache.Save(def);
-        await File.WriteAllTextAsync(tempFile, "modified content");
+        await File.WriteAllTextAsync(tempFile, "modified content", TestContext.Current.CancellationToken);
         var result = cache.TryGet("ModifiedStruct", out var cached);
         result.ShouldBeFalse();
         cached.ShouldBeNull();
@@ -137,7 +137,7 @@ public class StructCacheTests : TestBase
         await using var temp = new TempDirectory();
         var cache = new StructCache(temp.Path);
         var tempFile = Path.Combine(temp.Path, "valid.uc");
-        await File.WriteAllTextAsync(tempFile, "content");
+        await File.WriteAllTextAsync(tempFile, "content", TestContext.Current.CancellationToken);
 
         var def = new CachedStructDef
         {

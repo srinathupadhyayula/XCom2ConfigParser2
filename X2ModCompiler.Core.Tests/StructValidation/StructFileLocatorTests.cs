@@ -76,7 +76,7 @@ public class StructFileLocatorTests : IDisposable
         var result = locator.Locate("TargetStruct", "CorrectPackage");
 
         result.Found.ShouldBeTrue();
-        result.FilePath.ShouldContain("CorrectPackage");
+        result.FilePath!.ShouldContain("CorrectPackage");
     }
 
     [Fact]
