@@ -1,0 +1,95 @@
+using Kokuban;
+using Microsoft.Extensions.Logging;
+using Spectre.Console;
+using X2ModCompiler.Configuration;
+
+namespace X2ModCompiler.Application.Steps;
+
+/// <summary>
+/// Validates that critical XComEngine.ini sections are consolidated into a single file.
+/// This prevents configuration fragmentation that can lead to subtle build errors.
+/// </summary>
+public class IniValidationStep : IBuildStep
+{
+    private readonly ILogger _logger;
+
+    public string Name => "INI Consolidation Validation";
+
+    public IniValidationStep(ILoggerFactory loggerFactory)
+    {
+        _logger = loggerFactory.CreateLogger<IniValidationStep>();
+    }
+
+    public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
+    {
+        _logger.LogInformation(Chalk.Cyan["Validating INI consolidation across roots..."]);
+
+        var iniFiles = DiscoverIniFiles(options);
+        if (iniFiles.Count <= 1)
+        {
+            _logger.LogInformation(Chalk.Gray[$"Found {iniFiles.Count} XComEngine.ini files. Validation skipped (consolidation inherent)."]);
+            return true;
+        }
+
+        var sectionMap = new Dictionary<string, List<string>>();
+        string[] criticalSections = { "[Engine.ScriptPackages]", "[UnrealEd.EditorEngine]", "[X2ModCompiler.DependantPackages]" };
+
+        foreach (var file in iniFiles)
+        {
+            try
+            {
+                var content = await File.ReadAllLinesAsync(file, ct);
+                foreach (var line in content)
+                {
+                    var trimmed = line.Trim();
+                    foreach (var section in criticalSections)
+                    {
+                        if (trimmed.Equals(section, StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (!sectionMap.ContainsKey(section)) sectionMap[section] = new List<string>();
+                            sectionMap[section].Add(file);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(Chalk.Red[$"Failed to read INI file {file}: {ex.Message}"]);
+                return false;
+            }
+        }
+
+        // Check if sections are fragmented
+        var uniqueFiles = sectionMap.Values.SelectMany(x => x).Distinct().ToList();
+        
+        if (uniqueFiles.Count > 1)
+        {
+            _logger.LogError(Chalk.Bold.Red["Critical sections are spread across multiple XComEngine.ini files."]);
+            _logger.LogError(Chalk.Red["Please consolidate them into a single file to ensure reliable building."]);
+            
+            foreach (var file in uniqueFiles)
+            {
+                _logger.LogError(Chalk.Yellow[$"  -> {file}"]);
+            }
+            
+            return false;
+        }
+
+        _logger.LogInformation(Chalk.Green["INI consolidation validation passed."]);
+        return true;
+    }
+
+    private List<string> DiscoverIniFiles(BuildOptions options)
+    {
+        var files = new List<string>();
+        foreach (var root in options.IniRoots)
+        {
+            if (Directory.Exists(root))
+            {
+                var found = Directory.GetFiles(root, "XComEngine.ini", SearchOption.AllDirectories);
+                files.AddRange(found);
+            }
+        }
+        return files.Distinct().ToList();
+    }
+}
