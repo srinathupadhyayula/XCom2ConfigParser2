@@ -113,44 +113,39 @@ public class BuildController
             // BUILD PIPELINE - Exact parity with build_common.ps1
             // ============================================================
             
-            // 1. Regenerate ItemGroup (mimics _RegenerateItemGroup)
-            if (!_options.ValidateConfig)
-            {
-                pipeline.AddStep(new Steps.ProjectSyncStep(_projectSynchronizer, _loggerFactory.CreateLogger<Steps.ProjectSyncStep>()));
-            }
-
-            // 2. Clean Additional Mods (mimics _CleanAdditional)
-            if (!_options.ValidateConfig && _options.CleanMods.Count > 0)
-            {
-                pipeline.AddStep(new Steps.CleanAdditionalStep(_options, _loggerFactory.CreateLogger<Steps.CleanAdditionalStep>()));
-            }
-
-            // 3. Copy Mod to SDK (mimics _CopyModToSdk)
-            if (!_options.ValidateConfig)
-            {
-                pipeline.AddStep(new Steps.CopyModToSdkStep(_loggerFactory.CreateLogger<Steps.CopyModToSdkStep>()));
-            }
-
-            // 4. Convert Localization (mimics _ConvertLocalization)
-            if (!_options.ValidateConfig)
-            {
-                pipeline.AddStep(new Steps.LocalizationStep(_loggerFactory.CreateLogger<Steps.LocalizationStep>()));
-            }
-
-            // 5. Prepare INI (TWO-PASS ONLY - skipped for single-pass to match build_common)
-            // build_common.ps1 does NOT modify INI for single-pass builds
+            // 1. Prepare INI (TWO-PASS ONLY - modifies source INI BEFORE copying to staging)
+            // This ensures the modified INI is copied to staging by CopyModToSdkStep
             if (!_options.ValidateConfig)
             {
                 pipeline.AddStep(new Steps.PrepareIniStep(iniHandler, _options, _loggerFactory.CreateLogger<Steps.PrepareIniStep>()));
             }
 
-            // 6. Copy INI to Staging (ensures SDK reads modified ModEditPackages)
+            // 2. Regenerate ItemGroup (mimics _RegenerateItemGroup)
             if (!_options.ValidateConfig)
             {
-                pipeline.AddStep(new Steps.CopyIniToStagingStep(_loggerFactory.CreateLogger<Steps.CopyIniToStagingStep>()));
+                pipeline.AddStep(new Steps.ProjectSyncStep(_projectSynchronizer, _loggerFactory.CreateLogger<Steps.ProjectSyncStep>()));
             }
 
-            // 7. Copy Sources to SDK (mimics _CopyToSrc)
+            // 3. Clean Additional Mods (mimics _CleanAdditional)
+            if (!_options.ValidateConfig && _options.CleanMods.Count > 0)
+            {
+                pipeline.AddStep(new Steps.CleanAdditionalStep(_options, _loggerFactory.CreateLogger<Steps.CleanAdditionalStep>()));
+            }
+
+            // 4. Copy Mod to SDK (mimics _CopyModToSdk)
+            // NOW copies the MODIFIED INI to staging (since PrepareIniStep ran first)
+            if (!_options.ValidateConfig)
+            {
+                pipeline.AddStep(new Steps.CopyModToSdkStep(_loggerFactory.CreateLogger<Steps.CopyModToSdkStep>()));
+            }
+
+            // 5. Convert Localization (mimics _ConvertLocalization)
+            if (!_options.ValidateConfig)
+            {
+                pipeline.AddStep(new Steps.LocalizationStep(_loggerFactory.CreateLogger<Steps.LocalizationStep>()));
+            }
+
+            // 6. Copy Sources to SDK (mimics _CopyToSrc)
             if (!_options.ValidateConfig)
             {
                 pipeline.AddStep(new Steps.CopyToSrcStep(_loggerFactory.CreateLogger<Steps.CopyToSrcStep>()));
