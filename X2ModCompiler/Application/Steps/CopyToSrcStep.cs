@@ -42,10 +42,10 @@ public class CopyToSrcStep : IBuildStep
         {
             _logger.LogInformation(LogColors.PackageName(includePath));
         }
-        _logger.LogInformation(Chalk.Cyan["========================================"]);
+        _logger.LogInformation(LogColors.Separator);
 
         // 1. Mirror SrcOrig to Src (reset SDK to clean state)
-        _logger.LogInformation(Chalk.Cyan["[Step 1] Mirroring SrcOrig to Src..."]);
+        _logger.LogInformation(LogColors.Info("[Step 1] Mirroring SrcOrig to Src..."));
         await MirrorSrcOrigToSrcAsync(options.SdkPath, ct);
         _logger.LogInformation(LogColors.Success("[Step 1] Mirrored SrcOrig to Src."));
 
@@ -81,40 +81,40 @@ public class CopyToSrcStep : IBuildStep
         if (Directory.Exists(modSrcPath))
         {
             var packageCount = await CopySrcFolderAsync(modSrcPath, devSrcRoot, ct);
-            _logger.LogInformation(Chalk.Green[$"  Copied {packageCount} package(s) from {modSrcPath}"]);
-            
+            _logger.LogInformation(LogColors.Success($"  Copied {packageCount} package(s) from {modSrcPath}"));
+
             // List all packages copied from mod Src
             var modPackages = Directory.GetDirectories(modSrcPath);
-            _logger.LogInformation(Chalk.Cyan["  Mod packages copied:"]);
+            _logger.LogInformation(LogColors.Info("  Mod packages copied:"));
             foreach (var pkg in modPackages)
             {
-                _logger.LogInformation(Chalk.Cyan[$"    - {Path.GetFileName(pkg)}"]);
+                _logger.LogInformation(LogColors.Info($"    - {Path.GetFileName(pkg)}"));
             }
         }
         else
         {
-            _logger.LogWarning(Chalk.Yellow[$"  Mod source folder not found: {modSrcPath}"]);
+            _logger.LogWarning(LogColors.Warning($"  Mod source folder not found: {modSrcPath}"));
         }
 
         // 4. Final summary - list all packages in Development\Src
-        _logger.LogInformation(Chalk.Cyan["[Step 4] Final package inventory in Development\\Src:"]);
+        _logger.LogInformation(LogColors.Info("[Step 4] Final package inventory in Development\\Src:"));
         if (Directory.Exists(devSrcRoot))
         {
             var allPackages = Directory.GetDirectories(devSrcRoot);
-            _logger.LogInformation(Chalk.Cyan[$"  Total packages: {allPackages.Length}"]);
+            _logger.LogInformation(LogColors.Info($"  Total packages: {allPackages.Length}"));
             foreach (var pkg in allPackages.OrderBy(p => Path.GetFileName(p)))
             {
-                _logger.LogInformation(Chalk.Cyan[$"    - {Path.GetFileName(pkg)}"]);
+                _logger.LogInformation(LogColors.Info($"    - {Path.GetFileName(pkg)}"));
             }
         }
         else
         {
-            _logger.LogWarning(Chalk.Yellow["  Development\\Src directory does not exist!"]);
+            _logger.LogWarning(LogColors.Warning("  Development\\Src directory does not exist!"));
         }
 
-        _logger.LogInformation(Chalk.Green["========================================"]);
-        _logger.LogInformation(Chalk.Green["COPY TO SRC STEP COMPLETE"]);
-        _logger.LogInformation(Chalk.Green["========================================"]);
+        _logger.LogInformation(LogColors.Success("========================================"));
+        _logger.LogInformation(LogColors.Success("COPY TO SRC STEP COMPLETE"));
+        _logger.LogInformation(LogColors.Success("========================================"));
 
         return true;
     }
@@ -130,7 +130,7 @@ public class CopyToSrcStep : IBuildStep
 
         if (!Directory.Exists(srcOrigPath))
         {
-            _logger.LogWarning(Chalk.Yellow[$"SrcOrig folder not found: {srcOrigPath}"]);
+            _logger.LogWarning(LogColors.Warning($"SrcOrig folder not found: {srcOrigPath}"));
             return;
         }
 
@@ -167,7 +167,7 @@ public class CopyToSrcStep : IBuildStep
         // Robocopy exit codes: 0-7 generally indicate success
         if (process.ExitCode > 7)
         {
-            _logger.LogError(Chalk.Red[$"Robocopy failed with exit code {process.ExitCode}"]);
+            _logger.LogError(LogColors.Error($"Robocopy failed with exit code {process.ExitCode}"));
             if (!string.IsNullOrEmpty(error))
             {
                 _logger.LogError(error);
@@ -182,7 +182,7 @@ public class CopyToSrcStep : IBuildStep
     /// <returns>Number of packages copied</returns>
     private async Task<int> CopySrcFolderAsync(string includeDir, string devSrcRoot, CancellationToken ct)
     {
-        _logger.LogInformation(Chalk.Cyan[$"  CopySrcFolder: {includeDir} → {devSrcRoot}"]);
+        _logger.LogInformation(LogColors.Info($"  CopySrcFolder: {includeDir} → {devSrcRoot}"));
         
         // Copy all files and folders recursively
         await CopyDirectoryRecursiveAsync(includeDir, devSrcRoot, ct);
@@ -196,15 +196,15 @@ public class CopyToSrcStep : IBuildStep
         {
             var globalsPath = Path.Combine(devSrcRoot, "Core", "Globals.uci");
             
-            _logger.LogInformation(Chalk.Cyan[$"    Processing extra_globals.uci: {extraGlobalsFile}"]);
-            _logger.LogInformation(Chalk.Cyan[$"    Appending to: {globalsPath}"]);
+            _logger.LogInformation(LogColors.Info($"    Processing extra_globals.uci: {extraGlobalsFile}"));
+            _logger.LogInformation(LogColors.Info($"    Appending to: {globalsPath}"));
             
             // Append comment and contents to Globals.uci
             var extraContent = await File.ReadAllTextAsync(extraGlobalsFile, ct);
             var appendContent = $"// Macros included from {extraGlobalsFile}{Environment.NewLine}{extraContent}{Environment.NewLine}";
             
             await File.AppendAllTextAsync(globalsPath, appendContent, ct);
-            _logger.LogInformation(Chalk.Green["    Appended extra_globals.uci to Globals.uci"]);
+            _logger.LogInformation(LogColors.Success("    Appended extra_globals.uci to Globals.uci"));
         }
         
         return packageCount;

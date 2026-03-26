@@ -1,6 +1,7 @@
 using Kokuban;
 using Microsoft.Extensions.Logging;
 using X2ModCompiler.Configuration;
+using X2ModCompiler.Utilities;
 
 namespace X2ModCompiler.Application.Steps;
 
@@ -27,7 +28,7 @@ public class CopyModToSdkStep : IBuildStep
 
     public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
     {
-        _logger.LogInformation(Chalk.Cyan["Copying mod project to staging..."]);
+        _logger.LogInformation(LogColors.Info("Copying mod project to staging..."));
 
         // Exclude .x2proj and content options JSON from copy
         var excludePatterns = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -53,7 +54,7 @@ public class CopyModToSdkStep : IBuildStep
         // Create CookedPCConsole directory for Highlander mods (if needed)
         // This will be determined later based on package analysis
 
-        _logger.LogInformation(Chalk.Green["Copied mod project to staging."]);
+        _logger.LogInformation(LogColors.Success("Copied mod project to staging."));
         return true;
     }
 
@@ -96,7 +97,7 @@ public class CopyModToSdkStep : IBuildStep
         // Robocopy exit codes: 0-7 generally indicate success
         if (process.ExitCode > 7)
         {
-            _logger.LogError(Chalk.Red[$"Robocopy failed with exit code {process.ExitCode}"]);
+            _logger.LogError(LogColors.Error($"Robocopy failed with exit code {process.ExitCode}"));
             if (!string.IsNullOrEmpty(error))
             {
                 _logger.LogError(error);
@@ -141,7 +142,7 @@ public class CopyModToSdkStep : IBuildStep
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(Chalk.Yellow[$"Failed to read metadata from .x2proj: {ex.Message}"]);
+                _logger.LogWarning(LogColors.Warning($"Failed to read metadata from .x2proj: {ex.Message}"));
             }
         }
 

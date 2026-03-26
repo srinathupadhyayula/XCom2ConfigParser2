@@ -1,6 +1,7 @@
 using Kokuban;
 using Microsoft.Extensions.Logging;
 using X2ModCompiler.Configuration;
+using X2ModCompiler.Utilities;
 
 namespace X2ModCompiler.Application.Steps;
 
@@ -31,7 +32,7 @@ public class CopyScriptPackagesStep : IBuildStep
 
     public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
     {
-        _logger.LogInformation(Chalk.Cyan["Copying compiled script packages to staging..."]);
+        _logger.LogInformation(LogColors.Info("Copying compiled script packages to staging..."));
 
         var packagesToCopy = new List<string> { options.ModNameCanonical };
         packagesToCopy.AddRange(options.DependentPackages.Where(p => !packagesToCopy.Contains(p)));
@@ -67,7 +68,7 @@ public class CopyScriptPackagesStep : IBuildStep
                 }
                 else
                 {
-                    _logger.LogWarning(Chalk.Yellow[$"Highlander package not found: {cookedUpk}"]);
+                    _logger.LogWarning(LogColors.Warning($"Highlander package not found: {cookedUpk}"));
                 }
             }
             else
@@ -88,12 +89,12 @@ public class CopyScriptPackagesStep : IBuildStep
                 }
                 else
                 {
-                    _logger.LogWarning(Chalk.Yellow[$"Package not found (may be merged): {packageName}.u"]);
+                    _logger.LogWarning(LogColors.Warning($"Package not found (may be merged): {packageName}.u"));
                 }
             }
         }
 
-        _logger.LogInformation(Chalk.Green["Copied compiled script packages to staging."]);
+        _logger.LogInformation(LogColors.Success("Copied compiled script packages to staging."));
         return true;
     }
 }

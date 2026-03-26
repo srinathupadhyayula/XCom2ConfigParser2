@@ -1,6 +1,7 @@
 using Kokuban;
 using Microsoft.Extensions.Logging;
 using X2ModCompiler.Configuration;
+using X2ModCompiler.Utilities;
 
 namespace X2ModCompiler.Application.Steps;
 
@@ -22,7 +23,7 @@ public class CleanAdditionalStep : IBuildStep
 
     public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
     {
-        _logger.LogInformation(Chalk.Cyan["Cleaning additional mods..."]);
+        _logger.LogInformation(LogColors.Info("Cleaning additional mods..."));
 
         foreach (var modName in _options.CleanMods)
         {
@@ -34,7 +35,7 @@ public class CleanAdditionalStep : IBuildStep
             }
         }
 
-        _logger.LogInformation(Chalk.Green["Cleaned additional mods."]);
+        _logger.LogInformation(LogColors.Success("Cleaned additional mods."));
         return true;
     }
 }

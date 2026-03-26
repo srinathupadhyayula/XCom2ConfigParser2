@@ -37,30 +37,30 @@ public class CompilationStep : IBuildStep
 
     public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
     {
-        _logger.LogInformation(Chalk.Bold.Cyan[$">>> Starting compilation step for {options.ModNameCanonical}..."]);
+        _logger.LogInformation(LogColors.Info($">>> Starting compilation step for {options.ModNameCanonical}..."));
 
         // Use dependent packages detected by PrepareIniStep (or from CLI/settings.json)
         var dependentPackages = options.DependentPackages;
         bool twoPassRequired = dependentPackages.Count > 0 || options.TwoPassCompilation;
 
-        _logger.LogInformation(Chalk.Magenta[$"[DEBUG] Dependent Packages for Compilation: {dependentPackages.Count}"]);
+        _logger.LogInformation(LogColors.Info($"[DEBUG] Dependent Packages for Compilation: {dependentPackages.Count}"));
         foreach (var pkg in dependentPackages)
         {
-            _logger.LogInformation(Chalk.Gray[$"  -> {pkg}"]);
+            _logger.LogInformation(LogColors.Debug($"  -> {pkg}"));
         }
 
-        _logger.LogInformation(Chalk.Magenta[$"[DEBUG] Two-Pass Required: {twoPassRequired}"]);
+        _logger.LogInformation(LogColors.Info($"[DEBUG] Two-Pass Required: {twoPassRequired}"));
 
         if (twoPassRequired)
         {
-            _logger.LogInformation(Chalk.Bold.Green["[MODE] Two-Pass compilation flow"]);
+            _logger.LogInformation(LogColors.PhaseHeader("[MODE] Two-Pass compilation flow"));
 
             UsedTwoPass = true;
             return await ExecuteTwoPassAsync(options, dependentPackages, ct);
         }
         else
         {
-            _logger.LogInformation(Chalk.Bold.Yellow["[MODE] Single-Pass compilation flow (build_common parity)"]);
+            _logger.LogInformation(LogColors.PhaseHeader("[MODE] Single-Pass compilation flow (build_common parity)"));
             UsedTwoPass = false;
             return await ExecuteSinglePassAsync(options, ct);
         }
@@ -72,7 +72,7 @@ public class CompilationStep : IBuildStep
         // INI was already modified by PrepareIniStep - just compile
 
         // Pass 1
-        _logger.LogInformation(Chalk.Bold.Yellow["PHASE 1: INITIAL COMPILATION (Building base and all mod packages)"]);
+        _logger.LogInformation(LogColors.PhaseHeader("PHASE 1: INITIAL COMPILATION (Building base and all mod packages)"));
         bool phase1Success = await ExecuteCompilationPassAsync(options, 1, dependentPackages, ct);
 
         // Determine if Phase 2 should run based on Phase 1 output
@@ -80,12 +80,12 @@ public class CompilationStep : IBuildStep
 
         if (!shouldRunPhase2)
         {
-            _logger.LogError(Chalk.Red["Phase 1 failed with non-linkage errors - aborting Phase 2."]);
+            _logger.LogError(LogColors.Error("Phase 1 failed with non-linkage errors - aborting Phase 2."));
             return false;
         }
 
         // Pass 2 - NO INI modification, just compile
-        _logger.LogInformation(Chalk.Bold.Yellow["PHASE 2: FINAL LINKAGE (Resolving cross-package dependencies)"]);
+        _logger.LogInformation(LogColors.PhaseHeader("PHASE 2: FINAL LINKAGE (Resolving cross-package dependencies)"));
         if (!await ExecuteCompilationPassAsync(options, 2, dependentPackages, ct))
         {
             return false;
@@ -107,7 +107,7 @@ public class CompilationStep : IBuildStep
         // If Phase 1 succeeded, no need for Phase 2 (but we still run it for completeness)
         if (phase1Success)
         {
-            _logger.LogInformation(Chalk.Gray["Phase 1 succeeded - running Phase 2 for completeness."]);
+            _logger.LogInformation(LogColors.Debug("Phase 1 succeeded - running Phase 2 for completeness."));
             return true;
         }
 
@@ -125,18 +125,18 @@ public class CompilationStep : IBuildStep
         
         if (linkageErrorFound && dependentPackagesCompiled && mainModBinaryExists)
         {
-            _logger.LogInformation(Chalk.Cyan["Linkage error detected - Phase 2 will resolve cross-package dependencies."]);
+            _logger.LogInformation(LogColors.Info("Linkage error detected - Phase 2 will resolve cross-package dependencies."));
             return true;
         }
 
         // Other errors (syntax, missing sources, etc.) - do NOT run Phase 2
-        _logger.LogWarning(Chalk.Yellow["Phase 1 failed with non-linkage errors."]);
+        _logger.LogWarning(LogColors.Warning("Phase 1 failed with non-linkage errors."));
         if (!linkageErrorFound)
-            _logger.LogWarning(Chalk.Gray["  - No linkage error message found."]);
+            _logger.LogWarning(LogColors.Debug("  - No linkage error message found."));
         if (!dependentPackagesCompiled)
-            _logger.LogWarning(Chalk.Gray["  - Not all dependent packages were compiled."]);
+            _logger.LogWarning(LogColors.Debug("  - Not all dependent packages were compiled."));
         if (!mainModBinaryExists)
-            _logger.LogWarning(Chalk.Gray["  - Main mod .u file was not generated."]);
+            _logger.LogWarning(LogColors.Debug("  - Main mod .u file was not generated."));
         
         return false;
     }
@@ -170,15 +170,11 @@ public class CompilationStep : IBuildStep
             var binaryPath = Path.Combine(options.SdkPath, "XComGame", "Script", $"{options.ModNameCanonical}.u");
             if (File.Exists(binaryPath))
             {
-                _logger.LogInformation(
-                    Chalk.Cyan["################################################################################"]);
-                _logger.LogInformation(Chalk.Cyan[$"# [PHASE 1] EXPECTED dependency failure in: {compileTarget}"]);
-                _logger.LogInformation(
-                    Chalk.Cyan[$"# [PHASE 1] Binary '{options.ModNameCanonical}.u' was created successfully."]);
-                _logger.LogInformation(
-                    Chalk.Cyan["# Proceeding to Phase 2 for final linkage of dependent packages..."]);
-                _logger.LogInformation(
-                    Chalk.Cyan["################################################################################"]);
+                _logger.LogInformation(LogColors.Separator);
+                _logger.LogInformation(LogColors.Info($"# [PHASE 1] EXPECTED dependency failure in: {compileTarget}"));
+                _logger.LogInformation(LogColors.Info($"# [PHASE 1] Binary '{options.ModNameCanonical}.u' was created successfully."));
+                _logger.LogInformation(LogColors.Info("# Proceeding to Phase 2 for final linkage of dependent packages..."));
+                _logger.LogInformation(LogColors.Separator);
                 return true;
             }
         }

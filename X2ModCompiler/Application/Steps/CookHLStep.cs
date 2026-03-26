@@ -38,17 +38,17 @@ public class CookHLStep : IBuildStep
 
         if (!containsNative)
         {
-            _logger.LogInformation(Chalk.Gray["No native script packages detected. Skipping Highlander cooking."]);
+            _logger.LogInformation(LogColors.Debug("No native script packages detected. Skipping Highlander cooking."));
             return true;
         }
 
         if (options.Debug)
         {
-            _logger.LogInformation(Chalk.Yellow["Skipping Highlander cooking for debug build."]);
+            _logger.LogInformation(LogColors.Warning("Skipping Highlander cooking for debug build."));
             return true;
         }
 
-        _logger.LogInformation(Chalk.Cyan["Starting Highlander cooking..."]);
+        _logger.LogInformation(LogColors.Info("Starting Highlander cooking..."));
 
         // 1. Ensure CookedPCConsole exists in SDK
         var sdkCookedPCConsole = Path.Combine(options.SdkPath, "XComGame", "Published", "CookedPCConsole");
@@ -85,7 +85,7 @@ public class CookHLStep : IBuildStep
 
         // 4. Invoke CookPackages
         var cookArgs = "cookpackages -platform=pcconsole -quickanddirty -modcook -sha -multilanguagecook=INT+FRA+ITA+DEU+RUS+POL+KOR+ESN -singlethread -nopause";
-        _logger.LogInformation(Chalk.Cyan["Invoking CookPackages (Highlander)..."]);
+        _logger.LogInformation(LogColors.Info("Invoking CookPackages (Highlander)..."));
         var cookResult = await _runner.RunProcessAsync(options.CommandletPath, cookArgs, ct: ct);
         if (cookResult != 0)
         {
@@ -119,7 +119,7 @@ public class CookHLStep : IBuildStep
             }
         }
 
-        _logger.LogInformation(Chalk.Green["Highlander cooking complete."]);
+        _logger.LogInformation(LogColors.Success("Highlander cooking complete."));
         return true;
     }
 

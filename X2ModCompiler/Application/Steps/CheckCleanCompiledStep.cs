@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using X2ModCompiler.Configuration;
 using X2ModCompiler.Tracking;
 using X2ModCompiler.Compilation;
+using X2ModCompiler.Utilities;
 
 namespace X2ModCompiler.Application.Steps;
 
@@ -36,7 +37,7 @@ public class CheckCleanCompiledStep : IBuildStep
 
     public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
     {
-        _logger.LogInformation(Chalk.Cyan["Verifying compiled script packages..."]);
+        _logger.LogInformation(LogColors.Info("Verifying compiled script packages..."));
 
         // Compute current state
         var globalsPath = Path.Combine(options.SdkPath, "XComGame", "Config", "Globals.uci");
@@ -50,16 +51,16 @@ public class CheckCleanCompiledStep : IBuildStep
 
         if (needsClean)
         {
-            _logger.LogInformation(Chalk.Yellow["Selective cleaning of compiled scripts to avoid compiler error..."]);
+            _logger.LogInformation(LogColors.Warning("Selective cleaning of compiled scripts to avoid compiler error..."));
             
             // Clean all mod packages from SDK/Game script directories
             await _cleaner.CleanAllModPackagesAsync(options, ct);
             
-            _logger.LogInformation(Chalk.Green["Cleaned."]);
+            _logger.LogInformation(LogColors.Success("Cleaned."));
         }
         else
         {
-            _logger.LogInformation(Chalk.Gray["No environment changes detected - skipping selective clean."]);
+            _logger.LogInformation(LogColors.Debug("No environment changes detected - skipping selective clean."));
         }
 
         return true;
