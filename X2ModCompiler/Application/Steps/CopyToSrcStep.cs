@@ -1,6 +1,7 @@
 using Kokuban;
 using Microsoft.Extensions.Logging;
 using X2ModCompiler.Configuration;
+using X2ModCompiler.Utilities;
 
 namespace X2ModCompiler.Application.Steps;
 
@@ -29,53 +30,53 @@ public class CopyToSrcStep : IBuildStep
     {
         var devSrcRoot = Path.Combine(options.SdkPath, "Development", "Src");
 
-        _logger.LogInformation(Chalk.Cyan["========================================"]);
-        _logger.LogInformation(Chalk.Cyan["COPY TO SRC STEP - Detailed Logging"]);
-        _logger.LogInformation(Chalk.Cyan["========================================"]);
-        _logger.LogInformation(Chalk.Cyan[$"SDK Path: {options.SdkPath}"]);
-        _logger.LogInformation(Chalk.Cyan[$"Dev Src Root: {devSrcRoot}"]);
-        _logger.LogInformation(Chalk.Cyan[$"Mod Src Root: {options.ModSrcRoot}"]);
-        _logger.LogInformation(Chalk.Cyan[$"Include Paths Count: {options.IncludePaths.Count}"]);
+        _logger.LogInformation(LogColors.Separator);
+        _logger.LogInformation(LogColors.Info("COPY TO SRC STEP - Detailed Logging"));
+        _logger.LogInformation(LogColors.Separator);
+        _logger.LogInformation(LogColors.Info($"SDK Path: {options.SdkPath}"));
+        _logger.LogInformation(LogColors.Info($"Dev Src Root: {devSrcRoot}"));
+        _logger.LogInformation(LogColors.Info($"Mod Src Root: {options.ModSrcRoot}"));
+        _logger.LogInformation(LogColors.Info($"Include Paths Count: {options.IncludePaths.Count}"));
         
         foreach (var includePath in options.IncludePaths)
         {
-            _logger.LogInformation(Chalk.Cyan[$"  Include Path: {includePath}"]);
+            _logger.LogInformation(LogColors.PackageName(includePath));
         }
         _logger.LogInformation(Chalk.Cyan["========================================"]);
 
         // 1. Mirror SrcOrig to Src (reset SDK to clean state)
         _logger.LogInformation(Chalk.Cyan["[Step 1] Mirroring SrcOrig to Src..."]);
         await MirrorSrcOrigToSrcAsync(options.SdkPath, ct);
-        _logger.LogInformation(Chalk.Green["[Step 1] Mirrored SrcOrig to Src."]);
+        _logger.LogInformation(LogColors.Success("[Step 1] Mirrored SrcOrig to Src."));
 
         // 2. Copy dependency sources (IncludePaths)
         if (options.IncludePaths.Count > 0)
         {
-            _logger.LogInformation(Chalk.Cyan["[Step 2] Copying dependency sources to Src..."]);
+            _logger.LogInformation(LogColors.Info("[Step 2] Copying dependency sources to Src..."));
             foreach (var includePath in options.IncludePaths)
             {
                 if (Directory.Exists(includePath))
                 {
-                    _logger.LogInformation(Chalk.Green[$"  Including: {includePath}"]);
+                    _logger.LogInformation(LogColors.Success($"  Including: {includePath}"));
                     var packageCount = await CopySrcFolderAsync(includePath, devSrcRoot, ct);
-                    _logger.LogInformation(Chalk.Green[$"    Copied {packageCount} package(s) from {includePath}"]);
+                    _logger.LogInformation(LogColors.Success($"    Copied {packageCount} package(s) from {includePath}"));
                 }
                 else
                 {
-                    _logger.LogWarning(Chalk.Yellow[$"  Include path does not exist: {includePath}"]);
+                    _logger.LogWarning(LogColors.Warning($"  Include path does not exist: {includePath}"));
                 }
             }
-            _logger.LogInformation(Chalk.Green["[Step 2] Copied dependency sources to Src."]);
+            _logger.LogInformation(LogColors.Success("[Step 2] Copied dependency sources to Src."));
         }
         else
         {
-            _logger.LogInformation(Chalk.Gray["[Step 2] No IncludePaths specified - skipping dependency sources."]);
+            _logger.LogInformation(LogColors.Debug("[Step 2] No IncludePaths specified - skipping dependency sources."));
         }
 
         // 3. Copy mod sources to Src
         var modSrcPath = Path.Combine(options.ModSrcRoot, "Src");
-        _logger.LogInformation(Chalk.Cyan["[Step 3] Copying mod sources to Src..."]);
-        _logger.LogInformation(Chalk.Cyan[$"  Mod Src Path: {modSrcPath}"]);
+        _logger.LogInformation(LogColors.Info("[Step 3] Copying mod sources to Src..."));
+        _logger.LogInformation(LogColors.Info($"  Mod Src Path: {modSrcPath}"));
         
         if (Directory.Exists(modSrcPath))
         {

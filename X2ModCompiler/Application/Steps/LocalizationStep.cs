@@ -2,6 +2,7 @@ using Kokuban;
 using Microsoft.Extensions.Logging;
 using X2ModCompiler.Configuration;
 using System.Text;
+using X2ModCompiler.Utilities;
 
 namespace X2ModCompiler.Application.Steps;
 
@@ -28,11 +29,11 @@ public class LocalizationStep : IBuildStep
 
         if (!Directory.Exists(localizationPath))
         {
-            _logger.LogInformation(Chalk.Gray["No Localization folder found - skipping conversion."]);
+            _logger.LogInformation(LogColors.Debug("No Localization folder found - skipping conversion."));
             return true;
         }
 
-        _logger.LogInformation(Chalk.Cyan["Converting localization files UTF-8 → UTF-16..."]);
+        _logger.LogInformation(LogColors.Info("Converting localization files UTF-8 → UTF-16..."));
 
         var filesConverted = 0;
         var files = Directory.GetFiles(localizationPath, "*.int", SearchOption.AllDirectories)
@@ -55,11 +56,11 @@ public class LocalizationStep : IBuildStep
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(Chalk.Yellow[$"Failed to convert {file}: {ex.Message}"]);
+                _logger.LogWarning(LogColors.Warning($"Failed to convert {file}: {ex.Message}"));
             }
         }
 
-        _logger.LogInformation(Chalk.Green[$"Converted {filesConverted} localization file(s)."]);
+        _logger.LogInformation(LogColors.Success($"Converted {filesConverted} localization file(s)."));
         return true;
     }
 }

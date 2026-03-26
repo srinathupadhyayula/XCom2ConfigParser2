@@ -1,6 +1,7 @@
 using Kokuban;
 using Microsoft.Extensions.Logging;
 using X2ModCompiler.Configuration;
+using X2ModCompiler.Utilities;
 
 namespace X2ModCompiler.Application.Steps;
 
@@ -24,7 +25,7 @@ public class FinalCopyStep : IBuildStep
 
     public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
     {
-        _logger.LogInformation(Chalk.Cyan["Copying built mod to final destination..."]);
+        _logger.LogInformation(LogColors.Info("Copying built mod to final destination..."));
 
         // Ensure destination directory exists
         if (!Directory.Exists(options.FinalModPath))
@@ -58,7 +59,7 @@ public class FinalCopyStep : IBuildStep
         // Robocopy exit codes: 0-7 generally indicate success
         if (process.ExitCode > 7)
         {
-            _logger.LogError(Chalk.Red[$"Robocopy failed with exit code {process.ExitCode}"]);
+            _logger.LogError(LogColors.Error($"Robocopy failed with exit code {process.ExitCode}"));
             if (!string.IsNullOrEmpty(error))
             {
                 _logger.LogError(error);
@@ -80,25 +81,25 @@ public class FinalCopyStep : IBuildStep
                 try
                 {
                     Directory.Delete(options.StagingPath, recursive: true);
-                    _logger.LogInformation(Chalk.Green["Source staging directory removed."]);
+                    _logger.LogInformation(LogColors.Success("Source staging directory removed."));
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(Chalk.Yellow[$"Failed to remove staging directory: {ex.Message}"]);
+                    _logger.LogWarning(LogColors.Warning($"Failed to remove staging directory: {ex.Message}"));
                 }
             }
             else
             {
-                _logger.LogWarning(Chalk.Yellow["Destination has fewer items than source - preserving staging directory for safety."]);
+                _logger.LogWarning(LogColors.Warning("Destination has fewer items than source - preserving staging directory for safety."));
             }
         }
         else
         {
-            _logger.LogError(Chalk.Red["Destination directory was not created - preserving staging directory for safety."]);
+            _logger.LogError(LogColors.Error("Destination directory was not created - preserving staging directory for safety."));
             return false;
         }
 
-        _logger.LogInformation(Chalk.Green[$"Copied built mod to {options.FinalModPath}"]);
+        _logger.LogInformation(LogColors.Success($"Copied built mod to {options.FinalModPath}"));
         return true;
     }
 }

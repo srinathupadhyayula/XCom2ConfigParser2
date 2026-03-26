@@ -23,7 +23,7 @@ public class ProjectSyncStep : IBuildStep
 
     public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
     {
-        _logger.LogInformation(Chalk.Cyan["Synchronizing project files..."]);
+        _logger.LogInformation(LogColors.Info("Synchronizing project files..."));
         // This mirrors BuildController.Step_RegenerateItemGroup logic
         _synchronizer.Synchronize(options.ProjectRoot);
         return await Task.FromResult(true);

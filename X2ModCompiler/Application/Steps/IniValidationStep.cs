@@ -2,6 +2,7 @@ using Kokuban;
 using Microsoft.Extensions.Logging;
 using Spectre.Console;
 using X2ModCompiler.Configuration;
+using X2ModCompiler.Utilities;
 
 namespace X2ModCompiler.Application.Steps;
 
@@ -22,12 +23,12 @@ public class IniValidationStep : IBuildStep
 
     public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
     {
-        _logger.LogInformation(Chalk.Cyan["Validating INI consolidation across roots..."]);
+        _logger.LogInformation(LogColors.Info("Validating INI consolidation across roots..."));
 
         var iniFiles = DiscoverIniFiles(options);
         if (iniFiles.Count <= 1)
         {
-            _logger.LogInformation(Chalk.Gray[$"Found {iniFiles.Count} XComEngine.ini files. Validation skipped (consolidation inherent)."]);
+            _logger.LogInformation(LogColors.Debug($"Found {iniFiles.Count} XComEngine.ini files. Validation skipped (consolidation inherent)."));
             return true;
         }
 
@@ -54,7 +55,7 @@ public class IniValidationStep : IBuildStep
             }
             catch (Exception ex)
             {
-                _logger.LogError(Chalk.Red[$"Failed to read INI file {file}: {ex.Message}"]);
+                _logger.LogError(LogColors.Error($"Failed to read INI file {file}: {ex.Message}"));
                 return false;
             }
         }
@@ -64,18 +65,18 @@ public class IniValidationStep : IBuildStep
         
         if (uniqueFiles.Count > 1)
         {
-            _logger.LogError(Chalk.Bold.Red["Critical sections are spread across multiple XComEngine.ini files."]);
-            _logger.LogError(Chalk.Red["Please consolidate them into a single file to ensure reliable building."]);
+            _logger.LogError(LogColors.Error("Critical sections are spread across multiple XComEngine.ini files."));
+            _logger.LogError(LogColors.Error("Please consolidate them into a single file to ensure reliable building."));
             
             foreach (var file in uniqueFiles)
             {
-                _logger.LogError(Chalk.Yellow[$"  -> {file}"]);
+                _logger.LogWarning(LogColors.Warning($"  -> {file}"));
             }
             
             return false;
         }
 
-        _logger.LogInformation(Chalk.Green["INI consolidation validation passed."]);
+        _logger.LogInformation(LogColors.Success("INI consolidation validation passed."));
         return true;
     }
 

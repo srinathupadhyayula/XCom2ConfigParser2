@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using X2ModCompiler.Configuration;
 using Kokuban;
+using X2ModCompiler.Utilities;
 
 namespace X2ModCompiler.Application.Steps;
 
@@ -22,7 +23,7 @@ public class ScriptCleanupStep : IBuildStep
 
     public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
     {
-        _logger.LogInformation(Chalk.Cyan["Cleaning leftover script packages from SDK/Game directories..."]);
+        _logger.LogInformation(LogColors.Info("Cleaning leftover script packages from SDK/Game directories..."));
 
         var packages = GetAllScriptPackages(options);
         
@@ -54,7 +55,7 @@ public class ScriptCleanupStep : IBuildStep
             }
         }
 
-        _logger.LogInformation(Chalk.Green["Script cleanup complete."]);
+        _logger.LogInformation(LogColors.Success("Script cleanup complete."));
         return true;
     }
 

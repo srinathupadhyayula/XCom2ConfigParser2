@@ -1,6 +1,7 @@
 using Kokuban;
 using Microsoft.Extensions.Logging;
 using X2ModCompiler.Configuration;
+using X2ModCompiler.Utilities;
 
 namespace X2ModCompiler.Application.Steps;
 
@@ -22,7 +23,7 @@ public class PreMakeHooksStep : IBuildStep
 
     public Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
     {
-        _logger.LogInformation(Chalk.Cyan["Running pre-make hooks..."]);
+        _logger.LogInformation(LogColors.Info("Running pre-make hooks..."));
 
         foreach (var hook in _options.PreMakeHooks)
         {
@@ -36,7 +37,7 @@ public class PreMakeHooksStep : IBuildStep
             }
         }
 
-        _logger.LogInformation(Chalk.Green["Ran pre-make hooks."]);
+        _logger.LogInformation(LogColors.Success("Ran pre-make hooks."));
         return Task.FromResult(true);
     }
 }
