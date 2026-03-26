@@ -116,4 +116,34 @@ public static class LogColors
     /// Formats an error separator in bold red.
     /// </summary>
     public static string ErrorSeparator => Chalk.Bold.Red["!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"].ToString()!;
+
+    /// <summary>
+    /// Formats a progress message in blue.
+    /// Use for progress indicators (e.g., "Processing...", "Compiling...").
+    /// </summary>
+    public static string Progress(string message) => Chalk.Blue[message].ToString()!;
+
+    /// <summary>
+    /// Formats a success detail message in green with a checkmark.
+    /// Use for detailed success messages (e.g., "✓ File compiled successfully").
+    /// </summary>
+    public static string SuccessDetail(string message) => Chalk.Green[$"  ✓ {message}"].ToString()!;
+
+    /// <summary>
+    /// Formats an error detail message in red with an X mark.
+    /// Use for detailed error messages (e.g., "✗ Compilation failed").
+    /// </summary>
+    public static string ErrorDetail(string message) => Chalk.Red[$"  ✗ {message}"].ToString()!;
+
+    /// <summary>
+    /// Formats a timing message in gray with brackets.
+    /// Use for timing information (e.g., "[12.345s] Operation completed").
+    /// </summary>
+    public static string Timing(string message) => Chalk.Gray[$"[{message}]"].ToString()!;
+
+    /// <summary>
+    /// Formats a configuration value in cyan.
+    /// Use for displaying configuration values (e.g., "DebugMode: true").
+    /// </summary>
+    public static string ConfigValue(string value) => Chalk.Cyan[value].ToString()!;
 }
