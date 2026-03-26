@@ -29,42 +29,91 @@ public class CopyToSrcStep : IBuildStep
     {
         var devSrcRoot = Path.Combine(options.SdkPath, "Development", "Src");
 
+        _logger.LogInformation(Chalk.Cyan["========================================"]);
+        _logger.LogInformation(Chalk.Cyan["COPY TO SRC STEP - Detailed Logging"]);
+        _logger.LogInformation(Chalk.Cyan["========================================"]);
+        _logger.LogInformation(Chalk.Cyan[$"SDK Path: {options.SdkPath}"]);
+        _logger.LogInformation(Chalk.Cyan[$"Dev Src Root: {devSrcRoot}"]);
+        _logger.LogInformation(Chalk.Cyan[$"Mod Src Root: {options.ModSrcRoot}"]);
+        _logger.LogInformation(Chalk.Cyan[$"Include Paths Count: {options.IncludePaths.Count}"]);
+        
+        foreach (var includePath in options.IncludePaths)
+        {
+            _logger.LogInformation(Chalk.Cyan[$"  Include Path: {includePath}"]);
+        }
+        _logger.LogInformation(Chalk.Cyan["========================================"]);
+
         // 1. Mirror SrcOrig to Src (reset SDK to clean state)
-        _logger.LogInformation(Chalk.Cyan["Mirroring SrcOrig to Src..."]);
+        _logger.LogInformation(Chalk.Cyan["[Step 1] Mirroring SrcOrig to Src..."]);
         await MirrorSrcOrigToSrcAsync(options.SdkPath, ct);
-        _logger.LogInformation(Chalk.Green["Mirrored SrcOrig to Src."]);
+        _logger.LogInformation(Chalk.Green["[Step 1] Mirrored SrcOrig to Src."]);
 
         // 2. Copy dependency sources (IncludePaths)
         if (options.IncludePaths.Count > 0)
         {
-            _logger.LogInformation(Chalk.Cyan["Copying dependency sources to Src..."]);
+            _logger.LogInformation(Chalk.Cyan["[Step 2] Copying dependency sources to Src..."]);
             foreach (var includePath in options.IncludePaths)
             {
                 if (Directory.Exists(includePath))
                 {
-                    _logger.LogInformation($"  Including: {includePath}");
-                    await CopySrcFolderAsync(includePath, devSrcRoot, ct);
+                    _logger.LogInformation(Chalk.Green[$"  Including: {includePath}"]);
+                    var packageCount = await CopySrcFolderAsync(includePath, devSrcRoot, ct);
+                    _logger.LogInformation(Chalk.Green[$"    Copied {packageCount} package(s) from {includePath}"]);
                 }
                 else
                 {
-                    _logger.LogWarning($"  Include path does not exist: {includePath}");
+                    _logger.LogWarning(Chalk.Yellow[$"  Include path does not exist: {includePath}"]);
                 }
             }
-            _logger.LogInformation(Chalk.Green["Copied dependency sources to Src."]);
+            _logger.LogInformation(Chalk.Green["[Step 2] Copied dependency sources to Src."]);
+        }
+        else
+        {
+            _logger.LogInformation(Chalk.Gray["[Step 2] No IncludePaths specified - skipping dependency sources."]);
         }
 
         // 3. Copy mod sources to Src
         var modSrcPath = Path.Combine(options.ModSrcRoot, "Src");
+        _logger.LogInformation(Chalk.Cyan["[Step 3] Copying mod sources to Src..."]);
+        _logger.LogInformation(Chalk.Cyan[$"  Mod Src Path: {modSrcPath}"]);
+        
         if (Directory.Exists(modSrcPath))
         {
-            _logger.LogInformation(Chalk.Cyan["Copying mod sources to Src..."]);
-            await CopySrcFolderAsync(modSrcPath, devSrcRoot, ct);
-            _logger.LogInformation(Chalk.Green["Copied mod sources to Src."]);
+            var packageCount = await CopySrcFolderAsync(modSrcPath, devSrcRoot, ct);
+            _logger.LogInformation(Chalk.Green[$"  Copied {packageCount} package(s) from {modSrcPath}"]);
+            
+            // List all packages copied from mod Src
+            var modPackages = Directory.GetDirectories(modSrcPath);
+            _logger.LogInformation(Chalk.Cyan["  Mod packages copied:"]);
+            foreach (var pkg in modPackages)
+            {
+                _logger.LogInformation(Chalk.Cyan[$"    - {Path.GetFileName(pkg)}"]);
+            }
         }
         else
         {
-            _logger.LogWarning(Chalk.Yellow[$"Mod source folder not found: {modSrcPath}"]);
+            _logger.LogWarning(Chalk.Yellow[$"  Mod source folder not found: {modSrcPath}"]);
         }
+
+        // 4. Final summary - list all packages in Development\Src
+        _logger.LogInformation(Chalk.Cyan["[Step 4] Final package inventory in Development\\Src:"]);
+        if (Directory.Exists(devSrcRoot))
+        {
+            var allPackages = Directory.GetDirectories(devSrcRoot);
+            _logger.LogInformation(Chalk.Cyan[$"  Total packages: {allPackages.Length}"]);
+            foreach (var pkg in allPackages.OrderBy(p => Path.GetFileName(p)))
+            {
+                _logger.LogInformation(Chalk.Cyan[$"    - {Path.GetFileName(pkg)}"]);
+            }
+        }
+        else
+        {
+            _logger.LogWarning(Chalk.Yellow["  Development\\Src directory does not exist!"]);
+        }
+
+        _logger.LogInformation(Chalk.Green["========================================"]);
+        _logger.LogInformation(Chalk.Green["COPY TO SRC STEP COMPLETE"]);
+        _logger.LogInformation(Chalk.Green["========================================"]);
 
         return true;
     }
@@ -129,10 +178,16 @@ public class CopyToSrcStep : IBuildStep
     /// Copies the contents of a source folder to the SDK's Development\Src folder.
     /// Mimics _CopySrcFolder() from build_common.ps1.
     /// </summary>
-    private async Task CopySrcFolderAsync(string includeDir, string devSrcRoot, CancellationToken ct)
+    /// <returns>Number of packages copied</returns>
+    private async Task<int> CopySrcFolderAsync(string includeDir, string devSrcRoot, CancellationToken ct)
     {
+        _logger.LogInformation(Chalk.Cyan[$"  CopySrcFolder: {includeDir} → {devSrcRoot}"]);
+        
         // Copy all files and folders recursively
         await CopyDirectoryRecursiveAsync(includeDir, devSrcRoot, ct);
+        
+        // Count packages copied
+        var packageCount = Directory.GetDirectories(includeDir).Length;
 
         // Check for extra_globals.uci and append to Globals.uci
         var extraGlobalsFile = Path.Combine(includeDir, "extra_globals.uci");
@@ -140,15 +195,18 @@ public class CopyToSrcStep : IBuildStep
         {
             var globalsPath = Path.Combine(devSrcRoot, "Core", "Globals.uci");
             
-            _logger.LogInformation($"  Processing extra_globals.uci: {extraGlobalsFile}");
+            _logger.LogInformation(Chalk.Cyan[$"    Processing extra_globals.uci: {extraGlobalsFile}"]);
+            _logger.LogInformation(Chalk.Cyan[$"    Appending to: {globalsPath}"]);
             
             // Append comment and contents to Globals.uci
             var extraContent = await File.ReadAllTextAsync(extraGlobalsFile, ct);
             var appendContent = $"// Macros included from {extraGlobalsFile}{Environment.NewLine}{extraContent}{Environment.NewLine}";
             
             await File.AppendAllTextAsync(globalsPath, appendContent, ct);
-            _logger.LogInformation($"  Appended extra_globals.uci to {globalsPath}");
+            _logger.LogInformation(Chalk.Green["    Appended extra_globals.uci to Globals.uci"]);
         }
+        
+        return packageCount;
     }
 
     /// <summary>

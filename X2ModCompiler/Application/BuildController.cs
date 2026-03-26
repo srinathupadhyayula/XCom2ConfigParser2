@@ -144,7 +144,13 @@ public class BuildController
                 pipeline.AddStep(new Steps.PrepareIniStep(iniHandler, _options, _loggerFactory.CreateLogger<Steps.PrepareIniStep>()));
             }
 
-            // 6. Copy Sources to SDK (mimics _CopyToSrc)
+            // 6. Copy INI to Staging (ensures SDK reads modified ModEditPackages)
+            if (!_options.ValidateConfig)
+            {
+                pipeline.AddStep(new Steps.CopyIniToStagingStep(_loggerFactory.CreateLogger<Steps.CopyIniToStagingStep>()));
+            }
+
+            // 7. Copy Sources to SDK (mimics _CopyToSrc)
             if (!_options.ValidateConfig)
             {
                 pipeline.AddStep(new Steps.CopyToSrcStep(_loggerFactory.CreateLogger<Steps.CopyToSrcStep>()));

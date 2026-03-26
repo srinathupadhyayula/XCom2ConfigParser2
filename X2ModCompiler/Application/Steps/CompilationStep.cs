@@ -112,8 +112,9 @@ public class CompilationStep : IBuildStep
         }
 
         // Phase 1 failed - check if it's a linkage failure (expected for two-pass)
-        // Condition 1: Look for the specific linkage error pattern
-        var linkageErrorFound = _receiver.OutputContains("Could not load existing package file");
+        // Condition 1: Look for the specific linkage error pattern with .u file mentioned
+        var linkageErrorFound = _receiver.OutputContains("Could not load existing package file") && 
+                                _receiver.OutputContains($"{options.ModNameCanonical}.u");
         
         // Condition 2: All dependent packages were compiled (seen in output)
         var dependentPackagesCompiled = dependentPackages.All(pkg => 

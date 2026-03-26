@@ -93,15 +93,92 @@ public class ScriptCompiler
     {
         // build_common.ps1 parity: Mod-pass uses make -nopause (WITHOUT -unattended)
         var args = $"make -nopause";
-        
+
         if (options.Debug)
             args += " -debug";
 
         // Include mod argument for compiling a specific mod
         // Format: -mods <ModName> <StagingPath>
         args += $" -mods {modName} \"{stagingPath}\"";
+
+        _logger.ZLogInformation($"[COMPILER] Invoking: {_commandletPath} {args}");
         
+        // Log current INI content for debugging
+        var targetIni = FindTargetIni(options);
+        if (targetIni != null && System.IO.File.Exists(targetIni))
+        {
+            _logger.ZLogInformation($"[COMPILER] Reading INI from: {targetIni}");
+            var iniContent = await System.IO.File.ReadAllTextAsync(targetIni, ct);
+            var modEditPackagesSection = ExtractModEditPackages(iniContent);
+            _logger.ZLogInformation($"[COMPILER] ModEditPackages in INI at compilation time:{Environment.NewLine}{modEditPackagesSection}");
+        }
+        else
+        {
+            _logger.ZLogWarning($"[COMPILER] Target INI not found: {targetIni ?? "null"}");
+        }
+
         return await InvokeCommandlet(args, receiver, $"Mod Compilation ({modName})", ct);
+    }
+
+    private string? FindTargetIni(BuildOptions options)
+    {
+        // First check the mod's Config folder (where PrepareIniStep modifies it)
+        // The INI is typically in <ModName>\Config\0Base\XComEngine.ini
+        var modConfigPath = System.IO.Path.Combine(options.ModSrcRoot, "Config");
+        if (System.IO.Directory.Exists(modConfigPath))
+        {
+            var files = System.IO.Directory.GetFiles(modConfigPath, "XComEngine.ini", System.IO.SearchOption.AllDirectories);
+            if (files.Length > 0)
+            {
+                _logger.ZLogInformation($"[COMPILER] Found target INI in mod Config: {files[0]}");
+                return files[0];
+            }
+        }
+        
+        // Fallback to SDK Config folder
+        var sdkConfigPath = System.IO.Path.Combine(options.SdkPath, "XComGame", "Config");
+        if (System.IO.Directory.Exists(sdkConfigPath))
+        {
+            var files = System.IO.Directory.GetFiles(sdkConfigPath, "XComEngine.ini", System.IO.SearchOption.AllDirectories);
+            if (files.Length > 0)
+            {
+                _logger.ZLogInformation($"[COMPILER] Found target INI in SDK Config: {files[0]}");
+                return files[0];
+            }
+        }
+        
+        _logger.ZLogWarning($"[COMPILER] No XComEngine.ini found!");
+        return null;
+    }
+
+    private string ExtractModEditPackages(string iniContent)
+    {
+        var lines = iniContent.Split(new[] { "\r\n", "\r", "\n" }, System.StringSplitOptions.None);
+        var result = new System.Text.StringBuilder();
+        bool inEngineSection = false;
+        int packageCount = 0;
+        
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Equals("[UnrealEd.EditorEngine]", System.StringComparison.OrdinalIgnoreCase))
+            {
+                inEngineSection = true;
+                continue;
+            }
+            if (inEngineSection)
+            {
+                if (trimmed.StartsWith("[")) break;
+                if (trimmed.Contains("ModEditPackages"))
+                {
+                    result.AppendLine($"  {trimmed}");
+                    packageCount++;
+                }
+            }
+        }
+        
+        _logger.ZLogInformation($"[COMPILER] Found {packageCount} ModEditPackages entries");
+        return result.Length > 0 ? result.ToString() : "  (none found)";
     }
 
     /// <summary>

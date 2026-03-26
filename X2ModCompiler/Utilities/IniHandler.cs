@@ -233,6 +233,14 @@ public class IniHandler
             engineSectionIndex = lines.Count - 1;
         }
 
+        _logger.LogInformation(Chalk.Cyan[$"  [INI] Found [UnrealEd.EditorEngine] at line {engineSectionIndex + 1}"]);
+        _logger.LogInformation(Chalk.Cyan[$"  [INI] Current ModEditPackages in INI:"]);
+        for (int i = engineSectionIndex + 1; i < lines.Count && !lines[i].Trim().StartsWith("["); i++)
+        {
+            if (lines[i].Contains("ModEditPackages"))
+                _logger.LogInformation(Chalk.Cyan[$"    {lines[i].Trim()}"]);
+        }
+
         // 1. ALWAYS remove existing entries for main mod and dependants to ensure they are moved to the END
         int mainModIndex = FindPackageInSection(lines, engineSectionIndex, mainModName);
         if (mainModIndex != -1)
@@ -243,7 +251,7 @@ public class IniHandler
             engineSectionIndex = FindLastSection(lines, "[UnrealEd.EditorEngine]");
         }
 
-        if (dependantPackages != null)
+        if (dependantPackages != null && dependantPackages.Count > 0)
         {
             _logger.LogInformation(Chalk.Gray[$"  [INI] Removing existing entries for {dependantPackages.Count} dependents to move them after main mod."]);
             RemovePackagesFromSection(lines, engineSectionIndex, dependantPackages);
@@ -267,6 +275,13 @@ public class IniHandler
                  lines.Insert(insertPoint, $"+ModEditPackages={dep}");
                  insertPoint++;
              }
+        }
+        
+        _logger.LogInformation(Chalk.Cyan[$"  [INI] Final ModEditPackages in INI:"]);
+        for (int i = engineSectionIndex + 1; i < lines.Count && !lines[i].Trim().StartsWith("["); i++)
+        {
+            if (lines[i].Contains("ModEditPackages"))
+                _logger.LogInformation(Chalk.Cyan[$"    {lines[i].Trim()}"]);
         }
     }
 
