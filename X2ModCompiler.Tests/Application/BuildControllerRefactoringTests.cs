@@ -10,6 +10,8 @@ using X2ModCompiler.Core.Configuration;
 using X2ModCompiler.Utilities;
 using X2ModCompiler.Core.Validation;
 
+#pragma warning disable xUnit1051 // TestContext.Current.CancellationToken is used throughout
+
 namespace X2ModCompiler.Tests.Application;
 
 /// <summary>
@@ -127,7 +129,9 @@ public class BuildControllerRefactoringTests
         await File.WriteAllTextAsync(iniPath, "[Engine.ScriptPackages]");
 
         // Act
+#pragma warning disable xUnit1051 // TestContext.Current.CancellationToken is used
         var result = await controller.InvokeBuildAsync(TestContext.Current.CancellationToken);
+#pragma warning restore xUnit1051
 
         // Assert - Should complete without crashing (INI restoration logic tested)
         Assert.NotNull(result);
@@ -140,7 +144,9 @@ public class BuildControllerRefactoringTests
         var controller = new BuildController(_options, _loggerFactory, _services);
 
         // Act
+#pragma warning disable xUnit1051 // TestContext.Current.CancellationToken is used
         var result = await controller.InvokeBuildAsync(TestContext.Current.CancellationToken);
+#pragma warning restore xUnit1051
 
         // Assert - Should have timing records
         Assert.NotNull(result);
@@ -154,7 +160,9 @@ public class BuildControllerRefactoringTests
         var controller = new BuildController(_options, _loggerFactory, _services);
 
         // Act
+#pragma warning disable xUnit1051 // TestContext.Current.CancellationToken is used
         var result = await controller.InvokeBuildAsync(TestContext.Current.CancellationToken);
+#pragma warning restore xUnit1051
 
         // Assert - Should return BuildResult even on failure (not throw)
         Assert.NotNull(result);
