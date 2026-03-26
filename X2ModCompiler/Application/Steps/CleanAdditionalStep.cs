@@ -8,20 +8,17 @@ namespace X2ModCompiler.Application.Steps;
 /// <summary>
 /// Cleans additional mods before building. Mimics _CleanAdditional() from build_common.ps1.
 /// </summary>
-public class CleanAdditionalStep : IBuildStep
+public class CleanAdditionalStep : BuildStepBase
 {
     private readonly BuildOptions _options;
-    private readonly ILogger<CleanAdditionalStep> _logger;
 
     public CleanAdditionalStep(BuildOptions options, ILogger<CleanAdditionalStep> logger)
+        : base("Clean Additional Mods", logger)
     {
         _options = options;
-        _logger = logger;
     }
 
-    public string Name => "Clean Additional Mods";
-
-    public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
+    protected override Task<bool> ExecuteStepAsync(BuildOptions options, CancellationToken ct)
     {
         _logger.LogInformation(LogColors.Info("Cleaning additional mods..."));
 
@@ -31,11 +28,11 @@ public class CleanAdditionalStep : IBuildStep
             if (Directory.Exists(cleanDir))
             {
                 _logger.LogInformation($"  Cleaning: {modName}");
-                await Task.Run(() => Directory.Delete(cleanDir, recursive: true), ct);
+                Task.Run(() => Directory.Delete(cleanDir, recursive: true), ct);
             }
         }
 
         _logger.LogInformation(LogColors.Success("Cleaned additional mods."));
-        return true;
+        return Task.FromResult(true);
     }
 }

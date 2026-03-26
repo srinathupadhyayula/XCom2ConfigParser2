@@ -9,21 +9,17 @@ namespace X2ModCompiler.Application.Steps;
 /// <summary>
 /// Converts localization files from UTF-8 to UTF-16 encoding.
 /// This step mimics _ConvertLocalization() from build_common.ps1.
-/// 
+///
 /// The Unreal Engine localization system expects UTF-16 encoded files.
 /// </summary>
-public class LocalizationStep : IBuildStep
+public class LocalizationStep : BuildStepBase
 {
-    private readonly ILogger<LocalizationStep> _logger;
-
     public LocalizationStep(ILogger<LocalizationStep> logger)
+        : base("Convert Localization", logger)
     {
-        _logger = logger;
     }
 
-    public string Name => "Convert Localization";
-
-    public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
+    protected override async Task<bool> ExecuteStepAsync(BuildOptions options, CancellationToken ct)
     {
         var localizationPath = Path.Combine(options.StagingPath, "Localization");
 
