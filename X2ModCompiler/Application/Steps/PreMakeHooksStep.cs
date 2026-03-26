@@ -8,20 +8,17 @@ namespace X2ModCompiler.Application.Steps;
 /// <summary>
 /// Runs pre-make hooks before compilation. Mimics _RunPreMakeHooks() from build_common.ps1.
 /// </summary>
-public class PreMakeHooksStep : IBuildStep
+public class PreMakeHooksStep : BuildStepBase
 {
     private readonly BuildOptions _options;
-    private readonly ILogger<PreMakeHooksStep> _logger;
 
     public PreMakeHooksStep(BuildOptions options, ILogger<PreMakeHooksStep> logger)
+        : base("Run Pre-Make Hooks", logger)
     {
         _options = options;
-        _logger = logger;
     }
 
-    public string Name => "Run Pre-Make Hooks";
-
-    public Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
+    protected override Task<bool> ExecuteStepAsync(BuildOptions options, CancellationToken ct)
     {
         _logger.LogInformation(LogColors.Info("Running pre-make hooks..."));
 

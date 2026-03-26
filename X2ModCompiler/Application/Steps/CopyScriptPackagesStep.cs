@@ -8,14 +8,12 @@ namespace X2ModCompiler.Application.Steps;
 /// <summary>
 /// Copies compiled script packages (.u files) to the staging directory.
 /// This step mimics _CopyScriptPackages() from build_common.ps1.
-/// 
+///
 /// For Highlander mods (native packages): Copies cooked .upk files from Published\CookedPCConsole
 /// For regular mods: Copies .u files from SDK\XComGame\Script
 /// </summary>
-public class CopyScriptPackagesStep : IBuildStep
+public class CopyScriptPackagesStep : BuildStepBase
 {
-    private readonly ILogger<CopyScriptPackagesStep> _logger;
-
     private static readonly string[] NativePackages =
     {
         "XComGame", "Core", "Engine", "GFxUI", "AkAudio", "GameFramework",
@@ -24,13 +22,11 @@ public class CopyScriptPackagesStep : IBuildStep
     };
 
     public CopyScriptPackagesStep(ILogger<CopyScriptPackagesStep> logger)
+        : base("Copy Script Packages", logger)
     {
-        _logger = logger;
     }
 
-    public string Name => "Copy Script Packages";
-
-    public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
+    protected override async Task<bool> ExecuteStepAsync(BuildOptions options, CancellationToken ct)
     {
         _logger.LogInformation(LogColors.Info("Copying compiled script packages to staging..."));
 
