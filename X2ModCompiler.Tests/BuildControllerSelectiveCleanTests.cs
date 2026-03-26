@@ -15,7 +15,6 @@ using X2ModCompiler.Utilities;
 using X2ModCompiler.Tests.Shared;
 using X2ModCompiler.Core.Validation;
 using X2ModCompiler.Core.Configuration;
-using X2ModCompiler.Compilation;
 
 namespace X2ModCompiler.Tests;
 

@@ -64,7 +64,7 @@ public class ModAssetsCookStepIntegrationTests
     {
         // Arrange - Create SDK structure
         var gpcdPath = Path.Combine(_options.SdkPath, "XComGame", "CookedPCConsole", "GlobalPersistentCookerData.upk");
-        Directory.CreateDirectory(Path.GetDirectoryName(gpcdPath));
+        Directory.CreateDirectory(Path.GetDirectoryName(gpcdPath)!);
         File.WriteAllText(gpcdPath, "dummy");
 
         // Create empty SDK content mods directory
@@ -176,7 +176,7 @@ public class ModAssetsCookStepIntegrationTests
         
         // Create GPCD for SDK verification
         var gpcdPath = Path.Combine(_options.SdkPath, "XComGame", "CookedPCConsole", "GlobalPersistentCookerData.upk");
-        Directory.CreateDirectory(Path.GetDirectoryName(gpcdPath));
+        Directory.CreateDirectory(Path.GetDirectoryName(gpcdPath)!);
         File.WriteAllText(gpcdPath, "dummy");
 
         // Create empty SDK content mods directory

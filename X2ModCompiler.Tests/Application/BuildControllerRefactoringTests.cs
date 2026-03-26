@@ -106,7 +106,7 @@ public class BuildControllerRefactoringTests
         var controller = new BuildController(_options, _loggerFactory, _services);
 
         // Act
-        var result = await controller.InvokeBuildAsync(CancellationToken.None);
+        var result = await controller.InvokeBuildAsync(TestContext.Current.CancellationToken);
 
         // Assert - Build should complete (may succeed or fail based on setup, but should not crash)
         Assert.NotNull(result);
@@ -127,7 +127,7 @@ public class BuildControllerRefactoringTests
         await File.WriteAllTextAsync(iniPath, "[Engine.ScriptPackages]");
 
         // Act
-        var result = await controller.InvokeBuildAsync(CancellationToken.None);
+        var result = await controller.InvokeBuildAsync(TestContext.Current.CancellationToken);
 
         // Assert - Should complete without crashing (INI restoration logic tested)
         Assert.NotNull(result);
@@ -140,7 +140,7 @@ public class BuildControllerRefactoringTests
         var controller = new BuildController(_options, _loggerFactory, _services);
 
         // Act
-        var result = await controller.InvokeBuildAsync(CancellationToken.None);
+        var result = await controller.InvokeBuildAsync(TestContext.Current.CancellationToken);
 
         // Assert - Should have timing records
         Assert.NotNull(result);
@@ -154,7 +154,7 @@ public class BuildControllerRefactoringTests
         var controller = new BuildController(_options, _loggerFactory, _services);
 
         // Act
-        var result = await controller.InvokeBuildAsync(CancellationToken.None);
+        var result = await controller.InvokeBuildAsync(TestContext.Current.CancellationToken);
 
         // Assert - Should return BuildResult even on failure (not throw)
         Assert.NotNull(result);
@@ -168,7 +168,7 @@ public class BuildControllerRefactoringTests
         var controller = new BuildController(_options, _loggerFactory, _services);
 
         // Act
-        var result = await controller.InvokeCleanAsync(CancellationToken.None);
+        var result = await controller.InvokeCleanAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(result);
@@ -181,7 +181,7 @@ public class BuildControllerRefactoringTests
         var controller = new BuildController(_options, _loggerFactory, _services);
 
         // Act
-        var result = await controller.InvokeValidationAsync(CancellationToken.None);
+        var result = await controller.InvokeValidationAsync(TestContext.Current.CancellationToken);
 
         // Assert - Should complete without crashing
         Assert.True(result || false); // May be true or false based on setup

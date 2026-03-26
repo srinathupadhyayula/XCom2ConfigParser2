@@ -188,7 +188,7 @@ public class SdkEnvironmentVerifierTests
     {
         // Arrange
         var gpcdPath = Path.Combine(_options.SdkPath, "XComGame", "CookedPCConsole", "GlobalPersistentCookerData.upk");
-        Directory.CreateDirectory(Path.GetDirectoryName(gpcdPath));
+        Directory.CreateDirectory(Path.GetDirectoryName(gpcdPath)!);
         File.WriteAllText(gpcdPath, "dummy content");
         var verifier = new SdkEnvironmentVerifier(_options);
 
