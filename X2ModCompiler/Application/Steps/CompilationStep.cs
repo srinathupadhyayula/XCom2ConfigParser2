@@ -207,13 +207,9 @@ public class CompilationStep : IBuildStep
     {
         if (!await _compiler.CompileBaseAsync(options, _receiver, ct)) return false;
 
-        // Compile main mod + all dependent packages (matching two-pass behavior)
+        // Compile main mod only - dependent packages are handled via ModEditPackages in INI
+        // This matches build_common.ps1 behavior: -mods ModName StagingPath
         var compileTarget = options.ModNameCanonical;
-        if (options.DependentPackages.Count > 0)
-        {
-            compileTarget = $"{options.ModNameCanonical} {string.Join(" ", options.DependentPackages)}";
-            _logger.LogInformation(Chalk.Cyan[$"[DEBUG] Compiling with {options.DependentPackages.Count} dependent packages: {compileTarget}"]);
-        }
 
         var success = await _compiler.CompileModAsync(compileTarget, options.StagingPath, options, _receiver, ct);
 
