@@ -6,6 +6,8 @@ using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using X2ModCompiler.Configuration;
+using Polly;
+using Polly.Retry;
 
 namespace X2ModCompiler.Utilities;
 
@@ -45,15 +47,41 @@ public class ModernFileMirror : IFileMirrorParity
 {
     private readonly ILogger<ModernFileMirror> _logger;
 
+    private readonly AsyncRetryPolicy _retryPolicy;
+
     public ModernFileMirror(ILogger<ModernFileMirror> logger)
     {
         _logger = logger;
+        
+        // Configure Polly retry policy with exponential backoff
+        _retryPolicy = Policy
+            .Handle<IOException>()
+            .WaitAndRetryAsync(
+                retryCount: BuildConstants.MaxRetryAttempts,
+                sleepDurationProvider: retryAttempt =>
+                {
+                    var delay = BuildConstants.InitialRetryDelayMs * Math.Pow(2, retryAttempt);
+                    return TimeSpan.FromMilliseconds(delay);
+                },
+                onRetry: (outcome, timeSpan, retryCount, context) =>
+                {
+                    _logger.ZLogWarning($"Transient I/O error: {outcome.Message}. Retry attempt {retryCount} after {timeSpan.TotalMilliseconds}ms");
+                }
+            );
     }
 
     // Overload for tests that don't need a real logger factory (legacy shim)
     public ModernFileMirror(IProcessRunner processRunner)
     {
         _logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<ModernFileMirror>.Instance;
+        
+        // Configure Polly retry policy with exponential backoff for tests
+        _retryPolicy = Policy
+            .Handle<IOException>()
+            .WaitAndRetryAsync(
+                retryCount: 3,
+                sleepDurationProvider: retryAttempt => TimeSpan.FromMilliseconds(100 * Math.Pow(2, retryAttempt))
+            );
     }
 
     /// <inheritdoc/>
@@ -118,12 +146,13 @@ public class ModernFileMirror : IFileMirrorParity
             }
         }
 
-        await RetryPolicyAsync(async () => {
+        await _retryPolicy.ExecuteAsync(async (ct) =>
+        {
             using var sourceStream = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
             using var destStream = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true);
             await sourceStream.CopyToAsync(destStream, ct);
             File.SetLastWriteTimeUtc(destination, File.GetLastWriteTimeUtc(source));
-        }, ct);
+        }, CancellationToken.None);
     }
 
     /// <inheritdoc/>
@@ -131,19 +160,19 @@ public class ModernFileMirror : IFileMirrorParity
     {
         if (Directory.Exists(path))
         {
-            await RetryPolicyAsync(() => 
+            await _retryPolicy.ExecuteAsync(async () =>
             {
                 Directory.Delete(path, recursive);
-                return Task.CompletedTask;
-            }, ct);
+                await Task.CompletedTask;
+            });
         }
         else if (File.Exists(path))
         {
-            await RetryPolicyAsync(() => 
+            await _retryPolicy.ExecuteAsync(async () =>
             {
                 File.Delete(path);
-                return Task.CompletedTask;
-            }, ct);
+                await Task.CompletedTask;
+            });
         }
     }
 
@@ -211,27 +240,5 @@ public class ModernFileMirror : IFileMirrorParity
                 await CleanupOrphansAsync(new DirectoryInfo(srcSubDir), destSubDir, pattern, excludeFiles, excludeDirs, ct);
             }
         }
-    }
-
-    private async Task RetryPolicyAsync(Func<Task> action, CancellationToken ct)
-    {
-        int retries = BuildConstants.MaxRetryAttempts;
-        int delay = BuildConstants.InitialRetryDelayMs;
-
-        for (int i = 0; i < retries; i++)
-        {
-            try
-            {
-                await action();
-                return;
-            }
-            catch (IOException ex) when (i < retries - 1)
-            {
-                _logger.ZLogWarning($"Transient I/O error: {ex.Message}. Retrying in {delay}ms...");
-                await Task.Delay(delay, ct);
-                delay *= 2; // Exponential backoff
-            }
-        }
-        await action(); // Final attempt
     }
 }
