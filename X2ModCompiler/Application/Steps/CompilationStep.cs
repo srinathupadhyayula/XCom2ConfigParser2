@@ -14,10 +14,7 @@ namespace X2ModCompiler.Application.Steps;
 public class CompilationStep : IBuildStep
 {
     private readonly ScriptCompiler _compiler;
-    private readonly IniHandler _iniHandler;
     private readonly OutputReceiver _receiver;
-    private readonly BuildTracker _tracker;
-    private readonly ScriptCleaner _cleaner;
     private readonly ILogger<CompilationStep> _logger;
 
     /// <summary>
@@ -28,17 +25,11 @@ public class CompilationStep : IBuildStep
 
     public CompilationStep(
         ScriptCompiler compiler,
-        IniHandler iniHandler,
         OutputReceiver receiver,
-        BuildTracker tracker,
-        ScriptCleaner cleaner,
         ILogger<CompilationStep> logger)
     {
         _compiler = compiler;
-        _iniHandler = iniHandler;
         _receiver = receiver;
-        _tracker = tracker;
-        _cleaner = cleaner;
         _logger = logger;
     }
 
@@ -47,14 +38,6 @@ public class CompilationStep : IBuildStep
     public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
     {
         _logger.LogInformation(Chalk.Bold.Cyan[$">>> Starting compilation step for {options.ModNameCanonical}..."]);
-
-        string? targetIni = _iniHandler.FindTargetIni();
-        if (targetIni == null)
-            throw new BuildFailureException(
-                "Target XComEngine.ini for compilation detection/modification not found in project or fallback roots.",
-                1);
-
-        _logger.LogInformation(Chalk.Cyan[$"[DEBUG] Target Configuration File: {targetIni}"]);
 
         // Use dependent packages detected by PrepareIniStep (or from CLI/settings.json)
         var dependentPackages = options.DependentPackages;
@@ -68,60 +51,22 @@ public class CompilationStep : IBuildStep
 
         _logger.LogInformation(Chalk.Magenta[$"[DEBUG] Two-Pass Required: {twoPassRequired}"]);
 
-        // Check and clean mod packages BEFORE deciding compilation path
-        // This ensures cleanup happens regardless of single-pass or two-pass mode
-        if (!await CheckAndCleanModPackagesAsync(options, ct))
-            return false;
-
         if (twoPassRequired)
         {
             _logger.LogInformation(Chalk.Bold.Green["[MODE] Two-Pass compilation flow"]);
-            if (dependentPackages.Count == 0 && options.DependentPackages.Count > 0)
-            {
-                _logger.LogInformation(Chalk.Blue["[DEBUG] Using CLI-provided dependant packages."]);
-                dependentPackages = options.DependentPackages;
-            }
 
             UsedTwoPass = true;
-            return await ExecuteTwoPassAsync(options, targetIni, dependentPackages, ct);
+            return await ExecuteTwoPassAsync(options, dependentPackages, ct);
         }
         else
         {
-            _logger.LogInformation(Chalk.Bold.Yellow["[MODE] Single-Pass compilation flow"]);
+            _logger.LogInformation(Chalk.Bold.Yellow["[MODE] Single-Pass compilation flow (build_common parity)"]);
             UsedTwoPass = false;
             return await ExecuteSinglePassAsync(options, ct);
         }
     }
 
-    /// <summary>
-    /// Checks if mod packages need cleanup before compilation and performs cleanup if needed.
-    /// </summary>
-    private async Task<bool> CheckAndCleanModPackagesAsync(BuildOptions options, CancellationToken ct)
-    {
-        var modScriptPackages = new[] { options.ModNameCanonical };
-
-        // Check if any mod package source has been modified since last compilation
-        bool needsCleanup = await _tracker.ShouldCleanModScriptsAsync(
-            options.SdkPath,
-            Path.Combine(options.ModSrcRoot, "Src"),
-            modScriptPackages,
-            ct);
-
-        if (needsCleanup)
-        {
-            _logger.LogInformation(
-                Chalk.Yellow["Mod source files modified - cleaning old .u files before compilation..."]);
-            await _cleaner.CleanPackagesAsync(options.SdkPath, modScriptPackages, ct);
-        }
-        else
-        {
-            _logger.LogInformation(Chalk.Gray["No mod source changes detected - skipping cleanup."]);
-        }
-
-        return true;
-    }
-
-    private async Task<bool> ExecuteTwoPassAsync(BuildOptions options, string targetIni,
+    private async Task<bool> ExecuteTwoPassAsync(BuildOptions options,
         List<string> dependentPackages, CancellationToken ct)
     {
         // INI was already modified by PrepareIniStep - just compile
@@ -129,24 +74,6 @@ public class CompilationStep : IBuildStep
         // Pass 1
         _logger.LogInformation(Chalk.Bold.Yellow["PHASE 1: INITIAL COMPILATION (Building base and all mod packages)"]);
         bool phase1Success = await ExecuteCompilationPassAsync(options, 1, dependentPackages, ct);
-
-        // Record timestamps after Phase 1 if .u files were generated (even if Phase 1 "failed" but created binaries)
-        // The compiler may report failure due to linking errors but still produce valid .u files
-        var binaryPath = Path.Combine(options.SdkPath, "XComGame", "Script", $"{options.ModNameCanonical}.u");
-        if (File.Exists(binaryPath))
-        {
-            _logger.LogDebug("Recording mod package timestamps after Phase 1 (.u files generated)...");
-            await _tracker.RecordModTimestampsAsync(
-                Path.Combine(options.ModSrcRoot, "Src"),
-                new[] { options.ModNameCanonical },
-                ct);
-        }
-
-        if (!phase1Success)
-        {
-            // Note: ExecuteCompilationPassAsync handles the forced recovery check for Phase 1
-            return false;
-        }
 
         // Pass 2 - NO INI modification, just compile
         _logger.LogInformation(Chalk.Bold.Yellow["PHASE 2: FINAL LINKAGE (Resolving cross-package dependencies)"]);
@@ -212,17 +139,6 @@ public class CompilationStep : IBuildStep
         var compileTarget = options.ModNameCanonical;
 
         var success = await _compiler.CompileModAsync(compileTarget, options.StagingPath, options, _receiver, ct);
-
-        // Record timestamps if .u files were generated (even if compilation reported failure due to linking errors)
-        var binaryPath = Path.Combine(options.SdkPath, "XComGame", "Script", $"{options.ModNameCanonical}.u");
-        if (File.Exists(binaryPath))
-        {
-            _logger.LogDebug("Recording mod package timestamps (.u files generated)...");
-            await _tracker.RecordModTimestampsAsync(
-                Path.Combine(options.ModSrcRoot, "Src"),
-                new[] { options.ModNameCanonical },
-                ct);
-        }
 
         return success;
     }

@@ -6,11 +6,17 @@ using X2ModCompiler.Utilities;
 namespace X2ModCompiler.Application.Steps;
 
 /// <summary>
-/// Prepares the XComEngine.ini file for two-pass compilation by ensuring all required packages
-/// are listed in ModEditPackages. This step only runs for two-pass builds.
+/// Prepares the XComEngine.ini file for two-pass compilation ONLY.
 /// 
-/// For single-pass compilation: NO INI modification (pure build_common parity)
-/// For two-pass compilation: INI is modified once before Phase 1, restored after Phase 2
+/// SINGLE-PASS (build_common.ps1 parity):
+///   - NO INI modification whatsoever
+///   - User's existing ModEditPackages are used as-is
+///   - This matches build_common.ps1 behavior exactly
+/// 
+/// TWO-PASS (C# enhancement):
+///   - Modify INI once before Phase 1
+///   - Restore INI once after Phase 2
+///   - Total: 2 INI operations
 /// 
 /// Also detects two-pass requirement and stores it in BuildOptions for CompilationStep.
 /// </summary>
@@ -43,8 +49,16 @@ public class PrepareIniStep : IBuildStep
         var dependentPackages = _iniHandler.GetDependantPackages(currentContent);
         bool twoPassRequired = _iniHandler.IsTwoPassNeeded(currentContent) || options.TwoPassCompilation;
 
-        // Store detected two-pass requirement and dependent packages for CompilationStep
-        if (twoPassRequired && dependentPackages.Count > 0)
+        // SINGLE-PASS PATH: Do NOTHING - this matches build_common.ps1 exactly
+        if (!twoPassRequired)
+        {
+            _logger.LogInformation(Chalk.Gray["[INI] Single-pass compilation - NO INI modification (build_common parity)."]);
+            _logger.LogInformation(Chalk.Gray["[INI] User's existing ModEditPackages will be used as-is."]);
+            return true;
+        }
+
+        // TWO-PASS PATH: Store detected dependent packages for CompilationStep
+        if (dependentPackages.Count > 0)
         {
             // Add detected dependent packages to options so CompilationStep can use them
             foreach (var pkg in dependentPackages)
@@ -55,12 +69,6 @@ public class PrepareIniStep : IBuildStep
                 }
             }
             _logger.LogInformation(Chalk.Cyan[$"[INI] Detected {dependentPackages.Count} dependent packages from INI for two-pass compilation."]);
-        }
-
-        if (!twoPassRequired)
-        {
-            _logger.LogInformation(Chalk.Gray["[INI] Single-pass compilation - NO INI modification (build_common parity)."]);
-            return true;
         }
 
         // Two-pass: Prepare INI with all packages before Phase 1

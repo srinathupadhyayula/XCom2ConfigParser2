@@ -109,58 +109,75 @@ public class BuildController
 
             var pipeline = new BuildPipeline(_loggerFactory.CreateLogger<BuildPipeline>());
 
-            // 0. Early Validation
-            pipeline.AddStep(new Steps.IniValidationStep(_loggerFactory));
+            // ============================================================
+            // BUILD PIPELINE - Exact parity with build_common.ps1
+            // ============================================================
+            
+            // 1. Regenerate ItemGroup (mimics _RegenerateItemGroup)
+            if (!_options.ValidateConfig)
+            {
+                pipeline.AddStep(new Steps.ProjectSyncStep(_projectSynchronizer, _loggerFactory.CreateLogger<Steps.ProjectSyncStep>()));
+            }
 
-            // 1. Copy Mod to SDK Staging (mimics _CopyModToSdk from build_common.ps1)
+            // 2. Clean Additional Mods (mimics _CleanAdditional)
+            if (!_options.ValidateConfig && _options.CleanMods.Count > 0)
+            {
+                pipeline.AddStep(new Steps.CleanAdditionalStep(_options, _loggerFactory.CreateLogger<Steps.CleanAdditionalStep>()));
+            }
+
+            // 3. Copy Mod to SDK (mimics _CopyModToSdk)
             if (!_options.ValidateConfig)
             {
                 pipeline.AddStep(new Steps.CopyModToSdkStep(_loggerFactory.CreateLogger<Steps.CopyModToSdkStep>()));
             }
 
-            // 2. Convert Localization (UTF-8 → UTF-16, mimics _ConvertLocalization)
+            // 4. Convert Localization (mimics _ConvertLocalization)
             if (!_options.ValidateConfig)
             {
                 pipeline.AddStep(new Steps.LocalizationStep(_loggerFactory.CreateLogger<Steps.LocalizationStep>()));
             }
 
-            // 3. Prepare INI for compilation (ensure ModEditPackages includes dependents)
-            // This step also detects two-pass requirement and populates options.DependentPackages
+            // 5. Prepare INI (TWO-PASS ONLY - skipped for single-pass to match build_common)
+            // build_common.ps1 does NOT modify INI for single-pass builds
             if (!_options.ValidateConfig)
             {
                 pipeline.AddStep(new Steps.PrepareIniStep(iniHandler, _options, _loggerFactory.CreateLogger<Steps.PrepareIniStep>()));
             }
 
-            // 4. Copy Sources to SDK (before compilation - mimics _CopyToSrc from build_common.ps1)
-            // This copies SrcOrig → Src, dependencies → Src, and mod sources → Src
+            // 6. Copy Sources to SDK (mimics _CopyToSrc)
             if (!_options.ValidateConfig)
             {
                 pipeline.AddStep(new Steps.CopyToSrcStep(_loggerFactory.CreateLogger<Steps.CopyToSrcStep>()));
             }
 
-            // 5. Check Clean Compiled (after CopyToSrc, before compilation - mimics _CheckCleanCompiled)
-            // Checks for Globals.uci changes, Core.u rebuild, and build mode switches
+            // 7. Run Pre-Make Hooks (mimics _RunPreMakeHooks)
+            if (!_options.ValidateConfig && _options.PreMakeHooks.Count > 0)
+            {
+                pipeline.AddStep(new Steps.PreMakeHooksStep(_options, _loggerFactory.CreateLogger<Steps.PreMakeHooksStep>()));
+            }
+
+            // 8. Check Clean Compiled (mimics _CheckCleanCompiled)
             if (!_options.ValidateConfig)
             {
                 pipeline.AddStep(new Steps.CheckCleanCompiledStep(_tracker, _scriptCleaner, _loggerFactory.CreateLogger<Steps.CheckCleanCompiledStep>()));
             }
 
-            // 6. Script Compilation
+            // 9. Script Compilation (mimics _RunMakeBase + _RunMakeMod)
             Steps.CompilationStep? compilationStep = null;
             if (!_options.ValidateConfig)
             {
                 var receiver = new MakeOutputReceiver(new[] { _options.ModSrcRoot }.Concat(_options.IncludePaths).ToArray(), _loggerFactory.CreateLogger<MakeOutputReceiver>());
-                compilationStep = new Steps.CompilationStep(_compiler, iniHandler, receiver, _tracker, _scriptCleaner, _loggerFactory.CreateLogger<Steps.CompilationStep>());
+                compilationStep = new Steps.CompilationStep(_compiler, receiver, _loggerFactory.CreateLogger<Steps.CompilationStep>());
                 pipeline.AddStep(compilationStep);
             }
 
-            // 6. Copy Script Packages to Staging (mimics _CopyScriptPackages)
+            // 10. Copy Script Packages (mimics _CopyScriptPackages)
             if (!_options.ValidateConfig && !_options.CompileOnly)
             {
                 pipeline.AddStep(new Steps.CopyScriptPackagesStep(_loggerFactory.CreateLogger<Steps.CopyScriptPackagesStep>()));
             }
 
-            // 7. Asset Processing
+            // 11. Asset Processing (mimics _PrecompileShaders + _RunCookAssets + _CopyMissingUncooked)
             // Note: Shader step MUST happen before cooking - precompiler gets confused by inlined materials
             if (!(_options.CompileOnly || _options.ValidateConfig))
             {
@@ -170,19 +187,19 @@ public class BuildController
                 pipeline.AddStep(new Steps.UncookedCopyStep(_missingUncookedCopier, contentOptions, _loggerFactory.CreateLogger<Steps.UncookedCopyStep>()));
             }
 
-            // 8. Final Copy to Game Directory (mimics _FinalCopy)
+            // 12. Final Copy (mimics _FinalCopy)
             if (!(_options.CompileOnly || _options.ValidateConfig))
             {
                 pipeline.AddStep(new Steps.FinalCopyStep(_loggerFactory.CreateLogger<Steps.FinalCopyStep>()));
             }
 
-            // 9. Script Cleanup (after successful build, mimics _CleanLeftoverScripts from build_common.ps1)
+            // 13. Script Cleanup (mimics _CleanLeftoverScripts)
             if (!(_options.CompileOnly || _options.ValidateConfig) && !_options.Debug)
             {
                 pipeline.AddStep(new Steps.ScriptCleanupStep(_loggerFactory.CreateLogger<Steps.ScriptCleanupStep>()));
             }
 
-            // 10. Optional Validation
+            // 14. Optional Validation (C# only - not in build_common)
             if (_options.ValidateConfig)
             {
                 pipeline.AddStep(new Steps.ValidationStep(_fileProcessor, _loggerFactory.CreateLogger<Steps.ValidationStep>()));
