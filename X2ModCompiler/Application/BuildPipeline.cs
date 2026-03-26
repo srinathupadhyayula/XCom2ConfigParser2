@@ -30,12 +30,11 @@ public class BuildPipeline
     public async Task<List<BuildTimingRecord>> ExecuteAsync(BuildOptions options, CancellationToken ct)
     {
         var timings = new List<BuildTimingRecord>();
-        
+
         foreach (var step in _steps)
         {
             var sw = Stopwatch.StartNew();
-            _logger.LogInformation(LogColors.StepHeader(step.Name));
-            
+
             bool success = false;
             string? errorMessage = null;
 
@@ -50,7 +49,7 @@ public class BuildPipeline
                 errorMessage = ex.Message;
                 success = false;
             }
-            
+
             sw.Stop();
             timings.Add(new BuildTimingRecord(step.Name, sw.Elapsed.TotalSeconds, success ? "SUCCESS" : "FAILED", errorMessage));
 
