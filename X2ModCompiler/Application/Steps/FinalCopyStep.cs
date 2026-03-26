@@ -8,22 +8,18 @@ namespace X2ModCompiler.Application.Steps;
 /// <summary>
 /// Copies the staged mod from SDK to the final mod destination.
 /// This step mimics _FinalCopy() from build_common.ps1.
-/// 
+///
 /// Uses robocopy to mirror the staging directory to the final destination,
 /// then removes the staging directory to complete the move operation.
 /// </summary>
-public class FinalCopyStep : IBuildStep
+public class FinalCopyStep : BuildStepBase
 {
-    private readonly ILogger<FinalCopyStep> _logger;
-
     public FinalCopyStep(ILogger<FinalCopyStep> logger)
+        : base("Final Copy", logger)
     {
-        _logger = logger;
     }
 
-    public string Name => "Final Copy";
-
-    public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
+    protected override async Task<bool> ExecuteStepAsync(BuildOptions options, CancellationToken ct)
     {
         _logger.LogInformation(LogColors.Info("Copying built mod to final destination..."));
 

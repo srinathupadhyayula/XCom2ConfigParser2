@@ -10,26 +10,22 @@ namespace X2ModCompiler.Application.Steps;
 /// This step ensures that no stale compiled scripts interfere with subsequent builds or the game.
 /// Mimics _CleanLeftoverScripts from build_common.ps1.
 /// </summary>
-public class ScriptCleanupStep : IBuildStep
+public class ScriptCleanupStep : BuildStepBase
 {
-    private readonly ILogger<ScriptCleanupStep> _logger;
-
     public ScriptCleanupStep(ILogger<ScriptCleanupStep> logger)
+        : base("Script Cleanup", logger)
     {
-        _logger = logger;
     }
 
-    public string Name => "Script Cleanup";
-
-    public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
+    protected override Task<bool> ExecuteStepAsync(BuildOptions options, CancellationToken ct)
     {
         _logger.LogInformation(LogColors.Info("Cleaning leftover script packages from SDK/Game directories..."));
 
         var packages = GetAllScriptPackages(options);
-        
+
         foreach (var package in packages)
         {
-            if (ct.IsCancellationRequested) return false;
+            if (ct.IsCancellationRequested) return Task.FromResult(false);
 
             var paths = new[]
             {
@@ -56,7 +52,7 @@ public class ScriptCleanupStep : IBuildStep
         }
 
         _logger.LogInformation(LogColors.Success("Script cleanup complete."));
-        return true;
+        return Task.FromResult(true);
     }
 
     private List<string> GetAllScriptPackages(BuildOptions options)
