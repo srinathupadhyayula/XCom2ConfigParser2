@@ -7,35 +7,32 @@ namespace X2ModCompiler.Application.Steps;
 
 /// <summary>
 /// Prepares the XComEngine.ini file for two-pass compilation ONLY.
-/// 
+///
 /// SINGLE-PASS (build_common.ps1 parity):
 ///   - NO INI modification whatsoever
 ///   - User's existing ModEditPackages are used as-is
 ///   - This matches build_common.ps1 behavior exactly
-/// 
+///
 /// TWO-PASS (C# enhancement):
 ///   - Modify INI once before Phase 1
 ///   - Restore INI once after Phase 2
 ///   - Total: 2 INI operations
-/// 
+///
 /// Also detects two-pass requirement and stores it in BuildOptions for CompilationStep.
 /// </summary>
-public class PrepareIniStep : IBuildStep
+public class PrepareIniStep : BuildStepBase
 {
     private readonly IniHandler _iniHandler;
     private readonly BuildOptions _options;
-    private readonly ILogger<PrepareIniStep> _logger;
 
     public PrepareIniStep(IniHandler iniHandler, BuildOptions options, ILogger<PrepareIniStep> logger)
+        : base("Prepare INI", logger)
     {
         _iniHandler = iniHandler;
         _options = options;
-        _logger = logger;
     }
 
-    public string Name => "Prepare INI";
-
-    public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
+    protected override async Task<bool> ExecuteStepAsync(BuildOptions options, CancellationToken ct)
     {
         _logger.LogInformation(LogColors.Separator);
         _logger.LogInformation(LogColors.Info("PREPARE INI STEP - Detailed Logging"));

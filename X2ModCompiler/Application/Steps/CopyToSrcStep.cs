@@ -8,25 +8,21 @@ namespace X2ModCompiler.Application.Steps;
 /// <summary>
 /// Copies mod sources and dependencies to the SDK's Development\Src folder.
 /// This step mimics _CopyToSrc() from build_common.ps1.
-/// 
+///
 /// Key operations:
 /// 1. Mirrors SDK's SrcOrig to Src (resets SDK to clean state)
 /// 2. Copies dependency sources (IncludePaths) to Src
 /// 3. Copies mod sources to Src
 /// 4. Processes extra_globals.uci files (appends macros to Globals.uci)
 /// </summary>
-public class CopyToSrcStep : IBuildStep
+public class CopyToSrcStep : BuildStepBase
 {
-    private readonly ILogger<CopyToSrcStep> _logger;
-
     public CopyToSrcStep(ILogger<CopyToSrcStep> logger)
+        : base("Copy Sources to SDK", logger)
     {
-        _logger = logger;
     }
 
-    public string Name => "Copy Sources to SDK";
-
-    public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
+    protected override async Task<bool> ExecuteStepAsync(BuildOptions options, CancellationToken ct)
     {
         var devSrcRoot = Path.Combine(options.SdkPath, "Development", "Src");
 

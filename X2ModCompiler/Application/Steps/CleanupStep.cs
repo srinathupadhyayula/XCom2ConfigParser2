@@ -13,22 +13,19 @@ namespace X2ModCompiler.Application.Steps;
 /// Note: Selective clean of script packages is now handled by CompilationStep based on mod package timestamps.
 /// The SDK handles its own incremental compilation cleanup.
 /// </summary>
-public class CleanupStep : IBuildStep
+public class CleanupStep : BuildStepBase
 {
     private readonly AssetCooker _cooker;
     private readonly BuildTracker _tracker;
-    private readonly ILogger<CleanupStep> _logger;
 
     public CleanupStep(AssetCooker cooker, BuildTracker tracker, ILogger<CleanupStep> logger)
+        : base("Environment Cleanup", logger)
     {
         _cooker = cooker;
         _tracker = tracker;
-        _logger = logger;
     }
 
-    public string Name => "Environment Cleanup";
-
-    public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
+    protected override async Task<bool> ExecuteStepAsync(BuildOptions options, CancellationToken ct)
     {
         _logger.LogInformation("Cleaning build artifacts...");
 

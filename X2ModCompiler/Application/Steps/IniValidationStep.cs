@@ -10,18 +10,14 @@ namespace X2ModCompiler.Application.Steps;
 /// Validates that critical XComEngine.ini sections are consolidated into a single file.
 /// This prevents configuration fragmentation that can lead to subtle build errors.
 /// </summary>
-public class IniValidationStep : IBuildStep
+public class IniValidationStep : BuildStepBase
 {
-    private readonly ILogger _logger;
-
-    public string Name => "INI Consolidation Validation";
-
     public IniValidationStep(ILoggerFactory loggerFactory)
+        : base("INI Consolidation Validation", loggerFactory.CreateLogger<IniValidationStep>())
     {
-        _logger = loggerFactory.CreateLogger<IniValidationStep>();
     }
 
-    public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
+    protected override async Task<bool> ExecuteStepAsync(BuildOptions options, CancellationToken ct)
     {
         _logger.LogInformation(LogColors.Info("Validating INI consolidation across roots..."));
 

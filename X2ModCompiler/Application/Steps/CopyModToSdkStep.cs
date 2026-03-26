@@ -8,25 +8,21 @@ namespace X2ModCompiler.Application.Steps;
 /// <summary>
 /// Copies the mod project to the SDK staging directory.
 /// This step mimics _CopyModToSdk() from build_common.ps1.
-/// 
+///
 /// Key operations:
 /// 1. Mirror mod project to SDK\XComGame\Mods\ModName\ (excluding .x2proj and ContentForCook)
 /// 2. Create Script subdirectory for compiled packages
 /// 3. Write XComMod metadata file
 /// 4. Create CookedPCConsole directory for Highlander mods
 /// </summary>
-public class CopyModToSdkStep : IBuildStep
+public class CopyModToSdkStep : BuildStepBase
 {
-    private readonly ILogger<CopyModToSdkStep> _logger;
-
     public CopyModToSdkStep(ILogger<CopyModToSdkStep> logger)
+        : base("Copy Mod to SDK", logger)
     {
-        _logger = logger;
     }
 
-    public string Name => "Copy Mod to SDK";
-
-    public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
+    protected override async Task<bool> ExecuteStepAsync(BuildOptions options, CancellationToken ct)
     {
         _logger.LogInformation(LogColors.Info("Copying mod project to staging..."));
 

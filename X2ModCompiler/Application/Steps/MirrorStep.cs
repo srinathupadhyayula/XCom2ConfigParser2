@@ -7,20 +7,17 @@ namespace X2ModCompiler.Application.Steps;
 /// <summary>
 /// Mirrors the cooked and compiled artifacts to the local mod folder for final deployment.
 /// </summary>
-public class MirrorStep : IBuildStep
+public class MirrorStep : BuildStepBase
 {
     private readonly IFileMirrorParity _mirror;
-    private readonly ILogger<MirrorStep> _logger;
 
     public MirrorStep(IFileMirrorParity mirror, ILogger<MirrorStep> logger)
+        : base("File Mirroring", logger)
     {
         _mirror = mirror;
-        _logger = logger;
     }
 
-    public string Name => "File Mirroring";
-
-    public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
+    protected override async Task<bool> ExecuteStepAsync(BuildOptions options, CancellationToken ct)
     {
         _logger.LogInformation($"Mirroring build artifacts to {options.FinalModPath}...");
         // 1. Mirror staging to destination

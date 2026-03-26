@@ -11,11 +11,10 @@ namespace X2ModCompiler.Application.Steps;
 /// <summary>
 /// Orchestrates the UnrealScript compilation process, supporting both single-pass and complex two-pass linkage flows.
 /// </summary>
-public class CompilationStep : IBuildStep
+public class CompilationStep : BuildStepBase
 {
     private readonly ScriptCompiler _compiler;
     private readonly OutputReceiver _receiver;
-    private readonly ILogger<CompilationStep> _logger;
 
     /// <summary>
     /// Gets a value indicating whether two-pass compilation was performed.
@@ -27,15 +26,13 @@ public class CompilationStep : IBuildStep
         ScriptCompiler compiler,
         OutputReceiver receiver,
         ILogger<CompilationStep> logger)
+        : base("Script Compilation", logger)
     {
         _compiler = compiler;
         _receiver = receiver;
-        _logger = logger;
     }
 
-    public string Name => "Script Compilation";
-
-    public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
+    protected override async Task<bool> ExecuteStepAsync(BuildOptions options, CancellationToken ct)
     {
         _logger.LogInformation(LogColors.Info($">>> Starting compilation step for {options.ModNameCanonical}..."));
 

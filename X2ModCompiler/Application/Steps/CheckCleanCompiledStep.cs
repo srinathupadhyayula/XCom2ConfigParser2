@@ -11,31 +11,28 @@ namespace X2ModCompiler.Application.Steps;
 /// Checks for changes in build environment (Globals.uci, Core.u timestamp, build mode)
 /// and performs selective cleanup of compiled script packages if needed.
 /// This step mimics _CheckCleanCompiled() from build_common.ps1.
-/// 
+///
 /// Triggers for:
 /// - Build mode switch (debug ↔ release)
 /// - Changes to Globals.uci macros
 /// - External rebuild of Core packages
 /// </summary>
-public class CheckCleanCompiledStep : IBuildStep
+public class CheckCleanCompiledStep : BuildStepBase
 {
     private readonly BuildTracker _tracker;
     private readonly ScriptCleaner _cleaner;
-    private readonly ILogger<CheckCleanCompiledStep> _logger;
 
     public CheckCleanCompiledStep(
         BuildTracker tracker,
         ScriptCleaner cleaner,
         ILogger<CheckCleanCompiledStep> logger)
+        : base("Check Clean Compiled", logger)
     {
         _tracker = tracker;
         _cleaner = cleaner;
-        _logger = logger;
     }
 
-    public string Name => "Check Clean Compiled";
-
-    public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
+    protected override async Task<bool> ExecuteStepAsync(BuildOptions options, CancellationToken ct)
     {
         _logger.LogInformation(LogColors.Info("Verifying compiled script packages..."));
 

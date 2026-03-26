@@ -9,9 +9,8 @@ namespace X2ModCompiler.Application.Steps;
 /// Handles cooking of native script packages (Highlander).
 /// This step mimics the _RunCookHL logic in build_common.ps1.
 /// </summary>
-public class CookHLStep : IBuildStep
+public class CookHLStep : BuildStepBase
 {
-    private readonly ILogger<CookHLStep> _logger;
     private readonly IProcessRunner _runner;
     private readonly IFileMirrorParity _mirror;
 
@@ -23,15 +22,13 @@ public class CookHLStep : IBuildStep
     };
 
     public CookHLStep(ILogger<CookHLStep> logger, IProcessRunner runner, IFileMirrorParity mirror)
+        : base("Highlander Cooking", logger)
     {
-        _logger = logger;
         _runner = runner;
         _mirror = mirror;
     }
 
-    public string Name => "Highlander Cooking";
-
-    public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
+    protected override async Task<bool> ExecuteStepAsync(BuildOptions options, CancellationToken ct)
     {
         var modPackages = GetModScriptPackages(options);
         var containsNative = modPackages.Any(p => NativePackages.Contains(p, StringComparer.OrdinalIgnoreCase));
