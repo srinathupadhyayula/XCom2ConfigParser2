@@ -56,7 +56,7 @@ public class BuildController
 
         try
         {
-            PrintInfoHeader($"BUILDING {_options.ModName}");
+            PrintInfoHeader(string.Format(BuildConstants.BuildInProgressHeader, _options.ModName));
 
             // Priority roots: 1. Mod's Config folder (for detection) 2. SDK's Config folder (as fallback)
             var iniRoots = _options.IniRoots.Count > 0 ? _options.IniRoots : new List<string> { Path.Combine(_options.ProjectRoot, "Config"), Path.Combine(_options.SdkPath, "XComGame", "Config") };
@@ -218,9 +218,9 @@ public class BuildController
                 // Record Core timestamp after successful build (mod package timestamps are recorded by CompilationStep)
                 await _services.Tracker.RecordCoreTimestampAsync(_options.SdkPath, ct);
 
-                PrintSuccessHeader("BUILD COMPLETED SUCCESSFULLY");
+                PrintSuccessHeader(BuildConstants.BuildSuccessHeader);
             }
-            else PrintErrorHeader("BUILD FAILED");
+            else PrintErrorHeader(BuildConstants.BuildFailureHeader);
 
             var errors = timings.Where(t => t.Status == "FAILED").Select(t => $"{t.Description}: {t.ErrorMessage}").ToList();
 
@@ -270,7 +270,7 @@ public class BuildController
     {
         try
         {
-            PrintInfoHeader($"CLEANING {_options.ModName}");
+            PrintInfoHeader(string.Format(BuildConstants.CleanInProgressHeader, _options.ModName));
             
             // 1. Clean build cache (all steps)
             await _services.Mirror.DeleteAsync(_options.BuildCachePath, true, ct);
@@ -288,7 +288,7 @@ public class BuildController
     /// </summary>
     public async Task<bool> InvokeValidationAsync(CancellationToken ct = default)
     {
-        PrintInfoHeader($"VALIDATING {_options.ModName} CONFIGURATION");
+        PrintInfoHeader(string.Format(BuildConstants.ValidationInProgressHeader, _options.ModName));
 
         var pipeline = new BuildPipeline(_loggerFactory.CreateLogger<BuildPipeline>());
 

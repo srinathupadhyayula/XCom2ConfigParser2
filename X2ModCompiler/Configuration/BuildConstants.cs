@@ -6,6 +6,8 @@ namespace X2ModCompiler.Configuration;
 /// </summary>
 public static class BuildConstants
 {
+    #region Timing Constants
+
     /// <summary>
     /// Delay in milliseconds before starting the UnrealEd commandlet.
     /// This allows the file system to stabilize before compilation begins.
@@ -29,6 +31,10 @@ public static class BuildConstants
     /// </summary>
     public const int ConfigParserDelayMs = 1000;
 
+    #endregion
+
+    #region Retry Constants
+
     /// <summary>
     /// Maximum number of retry attempts for transient I/O operations.
     /// </summary>
@@ -44,4 +50,93 @@ public static class BuildConstants
     /// Timeout in milliseconds for process exit operations.
     /// </summary>
     public const int ProcessExitTimeoutMs = 5000;
+
+    #endregion
+
+    #region Application Constants
+
+    /// <summary>
+    /// The application name.
+    /// </summary>
+    public const string ApplicationName = "X2ModCompiler";
+
+    /// <summary>
+    /// The application version.
+    /// </summary>
+    public const string ApplicationVersion = "1.1.0";
+
+    /// <summary>
+    /// The build command name.
+    /// </summary>
+    public const string BuildCommandName = "build";
+
+    /// <summary>
+    /// The validate command name.
+    /// </summary>
+    public const string ValidateCommandName = "validate";
+
+    /// <summary>
+    /// The clean command name.
+    /// </summary>
+    public const string CleanCommandName = "clean";
+
+    #endregion
+
+    #region Build Header Messages
+
+    /// <summary>
+    /// Build in-progress header message format.
+    /// </summary>
+    public const string BuildInProgressHeader = "BUILDING {0}";
+
+    /// <summary>
+    /// Build success header message.
+    /// </summary>
+    public const string BuildSuccessHeader = "BUILD COMPLETED SUCCESSFULLY";
+
+    /// <summary>
+    /// Build failure header message.
+    /// </summary>
+    public const string BuildFailureHeader = "BUILD FAILED";
+
+    /// <summary>
+    /// Clean in-progress header message format.
+    /// </summary>
+    public const string CleanInProgressHeader = "CLEANING {0}";
+
+    /// <summary>
+    /// Clean success header message.
+    /// </summary>
+    public const string CleanSuccessHeader = "Clean completed successfully.";
+
+    /// <summary>
+    /// Clean failure header message.
+    /// </summary>
+    public const string CleanFailureHeader = "Clean failed.";
+
+    /// <summary>
+    /// Validation in-progress header message format.
+    /// </summary>
+    public const string ValidationInProgressHeader = "VALIDATING {0} CONFIGURATION";
+
+    #endregion
+
+    #region Path Constants
+
+    /// <summary>
+    /// Default build cache directory name.
+    /// </summary>
+    public const string BuildCacheDirectoryName = "BuildCache";
+
+    /// <summary>
+    /// Default config directory name.
+    /// </summary>
+    public const string ConfigDirectoryName = "Config";
+
+    /// <summary>
+    /// Default source directory name.
+    /// </summary>
+    public const string SrcDirectoryName = "Src";
+
+    #endregion
 }

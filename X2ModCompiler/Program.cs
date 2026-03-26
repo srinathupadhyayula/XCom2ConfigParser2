@@ -34,12 +34,12 @@ public class Program
         var app = new CommandApp();
         app.Configure(config =>
         {
-            config.SetApplicationName("X2ModCompiler");
-            config.AddCommand<BuildCommand>("build")
+            config.SetApplicationName(BuildConstants.ApplicationName);
+            config.AddCommand<BuildCommand>(BuildConstants.BuildCommandName)
                   .WithDescription("Builds the specified mod.");
-            config.AddCommand<ValidateCommand>("validate")
+            config.AddCommand<ValidateCommand>(BuildConstants.ValidateCommandName)
                   .WithDescription("Validates configuration files for the specified mod.");
-            config.AddCommand<CleanCommand>("clean")
+            config.AddCommand<CleanCommand>(BuildConstants.CleanCommandName)
                   .WithDescription("Cleans the build artifacts for the specified mod.");
         });
 
@@ -146,7 +146,7 @@ public class BuildCommand : AsyncCommand<BuildSettings>
     /// <returns>The command exit code.</returns>
     public override async Task<int> ExecuteAsync(CommandContext context, BuildSettings settings, CancellationToken cancellationToken)
     {
-        AnsiConsole.MarkupLine("[bold blue]X2ModCompiler v1.1.0 (with Config Validation)[/]");
+        AnsiConsole.MarkupLine($"[bold blue]{BuildConstants.ApplicationName} v{BuildConstants.ApplicationVersion} (with Config Validation)[/]");
         AnsiConsole.MarkupLine("[grey]XCOM 2 Mod Build System[/]\n");
 
         if (string.IsNullOrWhiteSpace(settings.SdkPath) || string.IsNullOrWhiteSpace(settings.GamePath))
@@ -240,7 +240,7 @@ public class ValidateCommand : AsyncCommand<BuildSettings>
 {
     public override async Task<int> ExecuteAsync(CommandContext context, BuildSettings settings, CancellationToken cancellationToken)
     {
-        AnsiConsole.MarkupLine("[bold blue]X2ModCompiler v1.1.0 - Config Validation[/]");
+        AnsiConsole.MarkupLine($"[bold blue]{BuildConstants.ApplicationName} v{BuildConstants.ApplicationVersion} - Config Validation[/]");
 
         if (string.IsNullOrWhiteSpace(settings.SdkPath))
         {
