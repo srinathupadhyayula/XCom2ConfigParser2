@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using ZLogger;
 using X2ModCompiler.Configuration;
 using X2ModCompiler.Utilities;
+using Kokuban;
 
 namespace X2ModCompiler.Compilation;
 
@@ -53,13 +54,13 @@ public class ScriptCompiler
         OutputReceiver receiver,
         CancellationToken ct)
     {
-        _logger.LogInformation("Compiling base packages...");
-        
+        _logger.LogInformation(LogColors.Info("Compiling base packages..."));
+
         // Pass 1: Final release build (if enabled)
         // build_common.ps1 parity: _RunMakeBase() does final_release pass first, then normal pass
         if (options.FinalRelease)
         {
-            _logger.LogInformation("Compiling base packages (final_release)...");
+            _logger.LogInformation(LogColors.Info("Compiling base packages (final_release)..."));
             var finalReleaseArgs = "make -nopause -unattended -final_release";
             if (options.Debug) finalReleaseArgs += " -debug";
 
@@ -101,20 +102,20 @@ public class ScriptCompiler
         // Format: -mods <ModName> <StagingPath>
         args += $" -mods {modName} \"{stagingPath}\"";
 
-        _logger.ZLogInformation($"[COMPILER] Invoking: {_commandletPath} {args}");
-        
+        _logger.LogInformation(LogColors.Info($"[COMPILER] Invoking: {_commandletPath} {args}"));
+
         // Log current INI content for debugging
         var targetIni = FindTargetIni(options);
         if (targetIni != null && System.IO.File.Exists(targetIni))
         {
-            _logger.ZLogInformation($"[COMPILER] Reading INI from: {targetIni}");
+            _logger.LogInformation(LogColors.Debug($"[COMPILER] Reading INI from: {targetIni}"));
             var iniContent = await System.IO.File.ReadAllTextAsync(targetIni, ct);
             var modEditPackagesSection = ExtractModEditPackages(iniContent);
-            _logger.ZLogInformation($"[COMPILER] ModEditPackages in INI at compilation time:{Environment.NewLine}{modEditPackagesSection}");
+            _logger.LogInformation(LogColors.Debug($"[COMPILER] ModEditPackages in INI at compilation time:{Environment.NewLine}{modEditPackagesSection}"));
         }
         else
         {
-            _logger.ZLogWarning($"[COMPILER] Target INI not found: {targetIni ?? "null"}");
+            _logger.LogWarning(LogColors.Warning($"[COMPILER] Target INI not found: {targetIni ?? "null"}"));
         }
 
         return await InvokeCommandlet(args, receiver, $"Mod Compilation ({modName})", ct);
@@ -130,11 +131,11 @@ public class ScriptCompiler
             var files = System.IO.Directory.GetFiles(modConfigPath, "XComEngine.ini", System.IO.SearchOption.AllDirectories);
             if (files.Length > 0)
             {
-                _logger.ZLogInformation($"[COMPILER] Found target INI in mod Config: {files[0]}");
+                _logger.LogInformation(LogColors.Debug($"[COMPILER] Found target INI in mod Config: {files[0]}"));
                 return files[0];
             }
         }
-        
+
         // Fallback to SDK Config folder
         var sdkConfigPath = System.IO.Path.Combine(options.SdkPath, "XComGame", "Config");
         if (System.IO.Directory.Exists(sdkConfigPath))
@@ -142,12 +143,12 @@ public class ScriptCompiler
             var files = System.IO.Directory.GetFiles(sdkConfigPath, "XComEngine.ini", System.IO.SearchOption.AllDirectories);
             if (files.Length > 0)
             {
-                _logger.ZLogInformation($"[COMPILER] Found target INI in SDK Config: {files[0]}");
+                _logger.LogInformation(LogColors.Debug($"[COMPILER] Found target INI in SDK Config: {files[0]}"));
                 return files[0];
             }
         }
-        
-        _logger.ZLogWarning($"[COMPILER] No XComEngine.ini found!");
+
+        _logger.LogWarning(LogColors.Warning("[COMPILER] No XComEngine.ini found!"));
         return null;
     }
 
@@ -177,7 +178,7 @@ public class ScriptCompiler
             }
         }
         
-        _logger.ZLogInformation($"[COMPILER] Found {packageCount} ModEditPackages entries");
+        _logger.LogInformation(LogColors.Debug($"[COMPILER] Found {packageCount} ModEditPackages entries"));
         return result.Length > 0 ? result.ToString() : "  (none found)";
     }
 
@@ -211,7 +212,7 @@ public class ScriptCompiler
     private async Task<bool> InvokeCommandlet(string args, OutputReceiver receiver, string description, CancellationToken ct)
     {
         receiver.ProcessDescription = description;
-        int exitCode = await _runner.RunProcessWithSleepAsync(_commandletPath, args, receiver, sleepAtStartMs: 1000, sleepAtEndMs: 5000, ct: ct);
+        int exitCode = await _runner.RunProcessWithSleepAsync(_commandletPath, args, receiver, sleepAtStartMs: BuildConstants.CommandletStartDelayMs, sleepAtEndMs: BuildConstants.CommandletEndDelayMs, ct: ct);
 
         return exitCode == 0;
     }

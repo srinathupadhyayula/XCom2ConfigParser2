@@ -37,40 +37,40 @@ public class PrepareIniStep : IBuildStep
 
     public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
     {
-        _logger.LogInformation(Chalk.Cyan["========================================"]);
-        _logger.LogInformation(Chalk.Cyan["PREPARE INI STEP - Detailed Logging"]);
-        _logger.LogInformation(Chalk.Cyan["========================================"]);
-        
+        _logger.LogInformation(LogColors.Separator);
+        _logger.LogInformation(LogColors.Info("PREPARE INI STEP - Detailed Logging"));
+        _logger.LogInformation(LogColors.Separator);
+
         var targetIni = _iniHandler.FindTargetIni();
         if (targetIni == null)
         {
-            _logger.LogWarning(Chalk.Yellow["[INI] No target INI found - skipping preparation."]);
+            _logger.LogWarning(LogColors.Warning("[INI] No target INI found - skipping preparation."));
             return true;
         }
 
-        _logger.LogInformation(Chalk.Cyan[$"Target INI: {targetIni}"]);
+        _logger.LogInformation(LogColors.Info($"Target INI: {targetIni}"));
 
         // Check if two-pass is required BEFORE modifying INI
         var currentContent = await File.ReadAllTextAsync(targetIni, ct);
         var dependentPackages = _iniHandler.GetDependantPackages(currentContent);
         bool twoPassRequired = _iniHandler.IsTwoPassNeeded(currentContent) || options.TwoPassCompilation;
 
-        _logger.LogInformation(Chalk.Cyan[$"[X2ModCompiler.DependantPackages] section content:"]);
+        _logger.LogInformation(LogColors.Info($"[X2ModCompiler.DependantPackages] section content:"));
         foreach (var pkg in dependentPackages)
         {
-            _logger.LogInformation(Chalk.Cyan[$"  + {pkg}"]);
+            _logger.LogInformation(LogColors.PackageName(pkg));
         }
-        
-        _logger.LogInformation(Chalk.Cyan[$"Two-pass required: {twoPassRequired}"]);
-        _logger.LogInformation(Chalk.Cyan[$"options.TwoPassCompilation: {options.TwoPassCompilation}"]);
-        _logger.LogInformation(Chalk.Cyan[$"options.DependentPackages (from CLI/settings): {string.Join(", ", options.DependentPackages)}"]);
+
+        _logger.LogInformation(LogColors.Info($"Two-pass required: {twoPassRequired}"));
+        _logger.LogInformation(LogColors.Info($"options.TwoPassCompilation: {options.TwoPassCompilation}"));
+        _logger.LogInformation(LogColors.Info($"options.DependentPackages (from CLI/settings): {string.Join(", ", options.DependentPackages)}"));
 
         // SINGLE-PASS PATH: Do NOTHING - this matches build_common.ps1 exactly
         if (!twoPassRequired)
         {
-            _logger.LogInformation(Chalk.Gray["[INI] Single-pass compilation - NO INI modification (build_common parity)."]);
-            _logger.LogInformation(Chalk.Gray["[INI] User's existing ModEditPackages will be used as-is."]);
-            _logger.LogInformation(Chalk.Green["========================================"]);
+            _logger.LogInformation(LogColors.Debug("[INI] Single-pass compilation - NO INI modification (build_common parity)."));
+            _logger.LogInformation(LogColors.Debug("[INI] User's existing ModEditPackages will be used as-is."));
+            _logger.LogInformation(LogColors.SuccessSeparator);
             return true;
         }
 
@@ -83,20 +83,20 @@ public class PrepareIniStep : IBuildStep
                 if (!options.DependentPackages.Contains(pkg))
                 {
                     options.DependentPackages.Add(pkg);
-                    _logger.LogInformation(Chalk.Green[$"Added {pkg} to options.DependentPackages"]);
+                    _logger.LogInformation(LogColors.Success($"Added {pkg} to options.DependentPackages"));
                 }
             }
-            _logger.LogInformation(Chalk.Cyan[$"[INI] Detected {dependentPackages.Count} dependent packages from INI for two-pass compilation."]);
+            _logger.LogInformation(LogColors.Info($"[INI] Detected {dependentPackages.Count} dependent packages from INI for two-pass compilation."));
         }
 
         // Two-pass: Prepare INI with all packages before Phase 1
-        _logger.LogInformation(Chalk.Cyan["[INI] Two-pass detected - preparing INI for compilation..."]);
-        
-        _logger.LogInformation(Chalk.Cyan["[INI] BEFORE modification - ModEditPackages:"]);
+        _logger.LogInformation(LogColors.Info("[INI] Two-pass detected - preparing INI for compilation..."));
+
+        _logger.LogInformation(LogColors.Info("[INI] BEFORE modification - ModEditPackages:"));
         var beforeModEditPackages = ExtractModEditPackages(currentContent);
         foreach (var line in beforeModEditPackages)
         {
-            _logger.LogInformation(Chalk.Cyan[$"  {line}"]);
+            _logger.LogInformation(LogColors.Info($"  {line}"));
         }
         
         var preparedContent = _iniHandler.PrepareModCompilationIni(currentContent, options.ModNameCanonical, dependentPackages);
@@ -108,15 +108,15 @@ public class PrepareIniStep : IBuildStep
             await stream.FlushAsync(ct);
         }
         
-        _logger.LogInformation(Chalk.Cyan["[INI] AFTER modification - ModEditPackages:"]);
+        _logger.LogInformation(LogColors.Info("[INI] AFTER modification - ModEditPackages:"));
         var afterModEditPackages = ExtractModEditPackages(preparedContent);
         foreach (var line in afterModEditPackages)
         {
-            _logger.LogInformation(Chalk.Cyan[$"  {line}"]);
+            _logger.LogInformation(LogColors.Info($"  {line}"));
         }
 
-        _logger.LogInformation(Chalk.Green["[INI] INI preparation complete. Ready for two-pass compilation."]);
-        _logger.LogInformation(Chalk.Green["========================================"]);
+        _logger.LogInformation(LogColors.Success("[INI] INI preparation complete. Ready for two-pass compilation."));
+        _logger.LogInformation(LogColors.SuccessSeparator);
         return true;
     }
 

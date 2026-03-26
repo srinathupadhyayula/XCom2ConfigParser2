@@ -22,46 +22,25 @@ public class BuildController
     private readonly BuildOptions _options;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<BuildController> _logger;
-    private readonly BuildTracker _tracker;
-    private readonly ScriptCompiler _compiler;
-    private readonly AssetCooker _cooker;
-    private readonly IFileMirrorParity _mirror;
-    private readonly IProcessRunner _processRunner;
-    private readonly ShaderPrecompiler _shaderPrecompiler;
-    private readonly MissingUncookedCopier _missingUncookedCopier;
-    private readonly ProjectSynchronizer _projectSynchronizer;
-    private readonly FileProcessor _fileProcessor;
-    private readonly ScriptCleaner _scriptCleaner;
+    private readonly BuildServices _services;
 
-    public static int ConfigParserDelayMs { get; set; } = 1000;
+    public static int ConfigParserDelayMs { get; set; } = BuildConstants.ConfigParserDelayMs;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BuildController"/> class.
+    /// </summary>
+    /// <param name="options">The build options.</param>
+    /// <param name="loggerFactory">The logger factory.</param>
+    /// <param name="services">The build services facade containing all required dependencies.</param>
     public BuildController(
         BuildOptions options,
         ILoggerFactory loggerFactory,
-        BuildTracker tracker,
-        ScriptCompiler compiler,
-        AssetCooker cooker,
-        IFileMirrorParity mirror,
-        IProcessRunner processRunner,
-        ShaderPrecompiler shaderPrecompiler,
-        MissingUncookedCopier missingUncookedCopier,
-        ProjectSynchronizer projectSynchronizer,
-        FileProcessor fileProcessor,
-        ScriptCleaner scriptCleaner)
+        BuildServices services)
     {
         _options = options;
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<BuildController>();
-        _tracker = tracker;
-        _compiler = compiler;
-        _cooker = cooker;
-        _mirror = mirror;
-        _processRunner = processRunner;
-        _shaderPrecompiler = shaderPrecompiler;
-        _missingUncookedCopier = missingUncookedCopier;
-        _projectSynchronizer = projectSynchronizer;
-        _fileProcessor = fileProcessor;
-        _scriptCleaner = scriptCleaner;
+        _services = services;
     }
 
     /// <summary>
@@ -98,12 +77,12 @@ public class BuildController
                 if (willNeedIniModification)
                 {
                     originalIniContent = await File.ReadAllTextAsync(targetIniPath, ct);
-                    _logger.LogInformation(Chalk.Gray[$"INI backup created for two-pass compilation: {Path.GetFileName(targetIniPath)}"]);
-                    _logger.LogInformation(Chalk.Gray[$"Target path: {targetIniPath}"]);
+                    _logger.LogInformation(LogColors.Debug($"INI backup created for two-pass compilation: {Path.GetFileName(targetIniPath)}"));
+                    _logger.LogInformation(LogColors.PathInfo(targetIniPath));
                 }
                 else
                 {
-                    _logger.LogInformation(Chalk.Gray[$"Single-pass compilation - NO INI modification (build_common parity)."]);
+                    _logger.LogInformation(LogColors.Debug("Single-pass compilation - NO INI modification (build_common parity)."));
                 }
             }
 
@@ -123,7 +102,7 @@ public class BuildController
             // 2. Regenerate ItemGroup (mimics _RegenerateItemGroup)
             if (!_options.ValidateConfig)
             {
-                pipeline.AddStep(new Steps.ProjectSyncStep(_projectSynchronizer, _loggerFactory.CreateLogger<Steps.ProjectSyncStep>()));
+                pipeline.AddStep(new Steps.ProjectSyncStep(_services.ProjectSynchronizer, _loggerFactory.CreateLogger<Steps.ProjectSyncStep>()));
             }
 
             // 3. Clean Additional Mods (mimics _CleanAdditional)
@@ -160,7 +139,7 @@ public class BuildController
             // 8. Check Clean Compiled (mimics _CheckCleanCompiled)
             if (!_options.ValidateConfig)
             {
-                pipeline.AddStep(new Steps.CheckCleanCompiledStep(_tracker, _scriptCleaner, _loggerFactory.CreateLogger<Steps.CheckCleanCompiledStep>()));
+                pipeline.AddStep(new Steps.CheckCleanCompiledStep(_services.Tracker, _services.ScriptCleaner, _loggerFactory.CreateLogger<Steps.CheckCleanCompiledStep>()));
             }
 
             // 9. Script Compilation (mimics _RunMakeBase + _RunMakeMod)
@@ -168,7 +147,7 @@ public class BuildController
             if (!_options.ValidateConfig)
             {
                 var receiver = new MakeOutputReceiver(new[] { _options.ModSrcRoot }.Concat(_options.IncludePaths).ToArray(), _loggerFactory.CreateLogger<MakeOutputReceiver>());
-                compilationStep = new Steps.CompilationStep(_compiler, receiver, _loggerFactory.CreateLogger<Steps.CompilationStep>());
+                compilationStep = new Steps.CompilationStep(_services.Compiler, receiver, _loggerFactory.CreateLogger<Steps.CompilationStep>());
                 pipeline.AddStep(compilationStep);
             }
 
@@ -183,9 +162,9 @@ public class BuildController
             if (!(_options.CompileOnly || _options.ValidateConfig))
             {
                 var contentOptions = LoadContentOptions();
-                pipeline.AddStep(new Steps.ShaderStep(_shaderPrecompiler, _loggerFactory.CreateLogger<Steps.ShaderStep>()));
-                pipeline.AddStep(new Steps.CookingStep(_cooker, contentOptions, _loggerFactory.CreateLogger<Steps.CookingStep>()));
-                pipeline.AddStep(new Steps.UncookedCopyStep(_missingUncookedCopier, contentOptions, _loggerFactory.CreateLogger<Steps.UncookedCopyStep>()));
+                pipeline.AddStep(new Steps.ShaderStep(_services.ShaderPrecompiler, _loggerFactory.CreateLogger<Steps.ShaderStep>()));
+                pipeline.AddStep(new Steps.CookingStep(_services.Cooker, contentOptions, _loggerFactory.CreateLogger<Steps.CookingStep>()));
+                pipeline.AddStep(new Steps.UncookedCopyStep(_services.MissingUncookedCopier, contentOptions, _loggerFactory.CreateLogger<Steps.UncookedCopyStep>()));
             }
 
             // 12. Final Copy (mimics _FinalCopy)
@@ -203,7 +182,7 @@ public class BuildController
             // 14. Optional Validation (C# only - not in build_common)
             if (_options.ValidateConfig)
             {
-                pipeline.AddStep(new Steps.ValidationStep(_fileProcessor, _loggerFactory.CreateLogger<Steps.ValidationStep>()));
+                pipeline.AddStep(new Steps.ValidationStep(_services.FileProcessor, _loggerFactory.CreateLogger<Steps.ValidationStep>()));
             }
 
             _logger.LogDebug($"Build pipeline initialized with {pipeline.GetStepCount()} steps.");
@@ -234,10 +213,10 @@ public class BuildController
                     new Dictionary<string, DateTime>()
                 );
 
-                await _tracker.SaveFingerprintAsync(fingerprint, ct);
+                await _services.Tracker.SaveFingerprintAsync(fingerprint, ct);
 
                 // Record Core timestamp after successful build (mod package timestamps are recorded by CompilationStep)
-                await _tracker.RecordCoreTimestampAsync(_options.SdkPath, ct);
+                await _services.Tracker.RecordCoreTimestampAsync(_options.SdkPath, ct);
 
                 PrintSuccessHeader("BUILD COMPLETED SUCCESSFULLY");
             }
@@ -255,7 +234,7 @@ public class BuildController
         catch (Exception ex)
         {
             sw.Stop();
-            _logger.LogError(Chalk.Bold.Red["Build pipeline aborted due to unhandled exception"]);
+            _logger.LogError(LogColors.Error("Build pipeline aborted due to unhandled exception"));
             _logger.LogError(ex.Message);
             return new BuildResult(
                 false, 
@@ -270,15 +249,15 @@ public class BuildController
             // Single-pass builds have NO INI modification (build_common parity)
             if (needsIniRestoration && originalIniContent != null && targetIniPath != null)
             {
-                _logger.LogInformation(Chalk.Cyan[$"Restoring {Path.GetFileName(targetIniPath)} to original state..."]);
+                _logger.LogInformation(LogColors.Info($"Restoring {Path.GetFileName(targetIniPath)} to original state..."));
                 try
                 {
                     await File.WriteAllTextAsync(targetIniPath, originalIniContent, ct);
-                    _logger.LogInformation(Chalk.Green[$"{Path.GetFileName(targetIniPath)} restoration complete."]);
+                    _logger.LogInformation(LogColors.Success($"{Path.GetFileName(targetIniPath)} restoration complete."));
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(Chalk.Red[$"Failed to restore {Path.GetFileName(targetIniPath)}: {ex.Message}"]);
+                    _logger.LogError(LogColors.Error($"Failed to restore {Path.GetFileName(targetIniPath)}: {ex.Message}"));
                 }
             }
         }
@@ -294,12 +273,12 @@ public class BuildController
             PrintInfoHeader($"CLEANING {_options.ModName}");
             
             // 1. Clean build cache (all steps)
-            await _mirror.DeleteAsync(_options.BuildCachePath, true, ct);
+            await _services.Mirror.DeleteAsync(_options.BuildCachePath, true, ct);
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(Chalk.Red[$"Cleanup failed: {ex.Message}"]);
+            _logger.LogError(LogColors.Error($"Cleanup failed: {ex.Message}"));
             return false;
         }
     }
@@ -317,33 +296,33 @@ public class BuildController
         pipeline.AddStep(new Steps.IniValidationStep(_loggerFactory));
 
         // 1. Config Validation
-        pipeline.AddStep(new Steps.ValidationStep(_fileProcessor, _loggerFactory.CreateLogger<Steps.ValidationStep>()));
+        pipeline.AddStep(new Steps.ValidationStep(_services.FileProcessor, _loggerFactory.CreateLogger<Steps.ValidationStep>()));
         var results = await pipeline.ExecuteAsync(_options, ct);
         return results.All(r => r.Status == "SUCCESS");
     }
 
     private void PrintInfoHeader(string message)
     {
-        Console.WriteLine();
-        Console.WriteLine(Chalk.Bold.Cyan["================================================================================"]);
-        Console.WriteLine(Chalk.Bold.Cyan[$"  {message}"]);
-        Console.WriteLine(Chalk.Bold.Cyan["================================================================================"]);
+        _logger.LogInformation("");
+        _logger.LogInformation(LogColors.Separator);
+        _logger.LogInformation(LogColors.BuildHeader(message));
+        _logger.LogInformation(LogColors.Separator);
     }
 
     private void PrintSuccessHeader(string message)
     {
-        Console.WriteLine();
-        Console.WriteLine(Chalk.Bold.Green["################################################################################"]);
-        Console.WriteLine(Chalk.Bold.Green[$"#  {message}"]);
-        Console.WriteLine(Chalk.Bold.Green["################################################################################"]);
+        _logger.LogInformation("");
+        _logger.LogInformation(LogColors.SuccessSeparator);
+        _logger.LogInformation(LogColors.SuccessHeader(message));
+        _logger.LogInformation(LogColors.SuccessSeparator);
     }
 
     private void PrintErrorHeader(string message)
     {
-        Console.WriteLine();
-        Console.WriteLine(Chalk.Bold.Red["!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"]);
-        Console.WriteLine(Chalk.Bold.Red[$"!  {message}"]);
-        Console.WriteLine(Chalk.Bold.Red["!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"]);
+        _logger.LogInformation("");
+        _logger.LogInformation(LogColors.ErrorSeparator);
+        _logger.LogInformation(LogColors.ErrorHeader(message));
+        _logger.LogInformation(LogColors.ErrorSeparator);
     }
 
     private ContentOptions LoadContentOptions()
@@ -360,7 +339,7 @@ public class BuildController
         }
         catch
         {
-            _logger.LogWarning(Chalk.Yellow[$"Failed to load content options from {optionsPath}. Using defaults."]);
+            _logger.LogWarning(LogColors.Warning($"Failed to load content options from {optionsPath}. Using defaults."));
             return new ContentOptions();
         }
     }

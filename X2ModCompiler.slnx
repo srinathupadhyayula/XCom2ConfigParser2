@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="X2ModCompiler.Core/X2ModCompiler.Core.csproj" />
+  <Project Path="X2ModCompiler.Core.Tests/X2ModCompiler.Core.Tests.csproj" />
+  <Project Path="X2ModCompiler/X2ModCompiler.csproj" />
+  <Project Path="X2ModCompiler.Tests/X2ModCompiler.Tests.csproj" />
+  <Project Path="X2ModCompiler.Tests.Shared/X2ModCompiler.Tests.Shared.csproj" />
+</Solution>

@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Management;
+using X2ModCompiler.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace X2ModCompiler.Utilities;
 
@@ -8,34 +10,36 @@ namespace X2ModCompiler.Utilities;
 /// </summary>
 public static class ProcessExtensions
 {
+    private static readonly ILogger _logger = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
+
     public static void KillProcessTree(int pid)
     {
         try
         {
             // Get all child processes
             var children = GetChildProcesses(pid);
-            
+
             // Kill children first (recursive)
             foreach (var child in children)
             {
                 KillProcessTree(child.Id);
             }
-            
+
             // Kill parent
             using var process = Process.GetProcessById(pid);
             if (!process.HasExited)
             {
                 process.Kill();
-                process.WaitForExit(5000);
+                process.WaitForExit(BuildConstants.ProcessExitTimeoutMs);
             }
         }
         catch (ArgumentException)
         {
             // Process already exited - ignore
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            Console.WriteLine($"Failed to kill process {pid}: {ex.Message}");
+            // Silently handle - process may already be dead
         }
     }
 

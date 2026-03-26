@@ -5,6 +5,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
+using X2ModCompiler.Configuration;
 
 namespace X2ModCompiler.Utilities;
 
@@ -214,8 +215,8 @@ public class ModernFileMirror : IFileMirrorParity
 
     private async Task RetryPolicyAsync(Func<Task> action, CancellationToken ct)
     {
-        int retries = 5;
-        int delay = 200;
+        int retries = BuildConstants.MaxRetryAttempts;
+        int delay = BuildConstants.InitialRetryDelayMs;
 
         for (int i = 0; i < retries; i++)
         {

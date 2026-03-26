@@ -48,6 +48,11 @@ public class BuildOptions
     public bool CompileOnly { get; set; }
 
     /// <summary>
+    /// Gets or sets the log verbosity level. Defaults to <see cref="Core.Configuration.CompilerLogLevel.Debug"/>.
+    /// </summary>
+    public CompilerLogLevel LogVerbosity { get; set; } = CompilerLogLevel.Debug;
+
+    /// <summary>
     /// Gets or sets a value indicating whether to use the Two-Pass linkage recovery compilation flow.
     /// </summary>
     public bool TwoPassCompilation { get; set; }

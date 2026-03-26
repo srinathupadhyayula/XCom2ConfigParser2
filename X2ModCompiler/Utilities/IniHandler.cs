@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Microsoft.Extensions.Logging;
 using Kokuban;
 using X2ModCompiler.Exceptions;
+using X2ModCompiler.Utilities;
 
 namespace X2ModCompiler.Utilities;
 
@@ -46,7 +47,7 @@ public class IniHandler
         {
             if (!Directory.Exists(root))
             {
-                _logger.LogDebug(Chalk.Gray[$"  Skipping non-existent root: {root}"]);
+                _logger.LogDebug(LogColors.Debug($"  Skipping non-existent root: {root}"));
                 continue;
             }
             var files = Directory.GetFiles(root, "XComEngine.ini", SearchOption.AllDirectories);
@@ -55,42 +56,42 @@ public class IniHandler
 
         if (candidates.Count == 0)
         {
-            _logger.LogWarning(Chalk.Yellow["[DEBUG] No XComEngine.ini files found in any roots."]);
+            _logger.LogWarning(LogColors.Warning("[DEBUG] No XComEngine.ini files found in any roots."));
             return null;
         }
 
         if (candidates.Count == 1)
         {
-            _logger.LogInformation(Chalk.Cyan[$"[DEBUG] Found single candidate: {candidates[0]}"]);
+            _logger.LogInformation(LogColors.Info($"[DEBUG] Found single candidate: {candidates[0]}"));
             _targetFile = candidates[0];
             return _targetFile;
         }
 
         var targetSections = new[] { "[X2ModCompiler.DependantPackages]", "[UnrealEd.EditorEngine]" };
-        _logger.LogInformation(Chalk.Cyan[$"[DEBUG] Multiple candidates ({candidates.Count}). Prioritizing based on sections..."]);
-        
+        _logger.LogInformation(LogColors.Info($"[DEBUG] Multiple candidates ({candidates.Count}). Prioritizing based on sections..."));
+
         var priorityFiles = candidates.Where(f => {
             bool found = FileContainsAnySection(f, targetSections);
-            if (found) _logger.LogInformation(Chalk.Green[$"  + Priority match: {f}"]);
+            if (found) _logger.LogInformation(LogColors.Success($"  + Priority match: {f}"));
             return found;
         }).ToList();
-        
+
         if (priorityFiles.Count == 1)
         {
             _targetFile = priorityFiles[0];
         }
         else if (priorityFiles.Count > 1)
         {
-            _logger.LogInformation(Chalk.Cyan["  Multiple priority matches. Choosing first non-0Base file..."]);
+            _logger.LogInformation(LogColors.Info("  Multiple priority matches. Choosing first non-0Base file..."));
             _targetFile = priorityFiles.OrderBy(f => f.Contains("0Base") ? 1 : 0).First();
         }
         else
         {
-            _logger.LogInformation(Chalk.Cyan["  No priority matches. Choosing first non-0Base file from total candidates..."]);
+            _logger.LogInformation(LogColors.Info("  No priority matches. Choosing first non-0Base file from total candidates..."));
             _targetFile = candidates.OrderBy(f => f.Contains("0Base") ? 1 : 0).First();
         }
 
-        _logger.LogInformation(Chalk.Bold.Cyan[$"[DEBUG] Selected: {_targetFile}"]);
+        _logger.LogInformation(LogColors.Info($"[DEBUG] Selected: {_targetFile}"));
         return _targetFile;
     }
 
@@ -127,7 +128,7 @@ public class IniHandler
     /// <returns>The modified INI content string.</returns>
     public string PrepareStagedIni(string originalContent, string mainModName, List<string>? dependantPackages = null)
     {
-        _logger.LogInformation(Chalk.Cyan["[INI] Preparing staged configuration..."]);
+        _logger.LogInformation(LogColors.Info("[INI] Preparing staged configuration..."));
         var lines = originalContent.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None).ToList();
         RemoveSection(lines, "[X2ModCompiler.DependantPackages]");
         EnsurePackagesInEngineSection(lines, mainModName, dependantPackages);
@@ -145,7 +146,7 @@ public class IniHandler
     /// <returns>The modified INI content.</returns>
     public string PrepareModCompilationIni(string originalContent, string mainModName, List<string>? dependantPackages)
     {
-        _logger.LogInformation(Chalk.Cyan[$"[INI] Injecting mod packages into [UnrealEd.EditorEngine]: {mainModName}{(dependantPackages?.Count > 0 ? (", " + string.Join(", ", dependantPackages)) : "")}"]);
+        _logger.LogInformation(LogColors.Info($"[INI] Injecting mod packages into [UnrealEd.EditorEngine]: {mainModName}{(dependantPackages?.Count > 0 ? (", " + string.Join(", ", dependantPackages)) : "")}"));
         var lines = originalContent.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None).ToList();
         RemoveSection(lines, "[X2ModCompiler.DependantPackages]");
         EnsurePackagesInEngineSection(lines, mainModName, dependantPackages);
@@ -227,25 +228,25 @@ public class IniHandler
         int engineSectionIndex = FindLastSection(lines, "[UnrealEd.EditorEngine]");
         if (engineSectionIndex == -1)
         {
-            _logger.LogInformation(Chalk.Gray["  [INI] [UnrealEd.EditorEngine] section not found. Creating it at the end of the file."]);
+            _logger.LogInformation(LogColors.Debug("  [INI] [UnrealEd.EditorEngine] section not found. Creating it at the end of the file."));
             lines.Add("");
             lines.Add("[UnrealEd.EditorEngine]");
             engineSectionIndex = lines.Count - 1;
         }
 
-        _logger.LogInformation(Chalk.Cyan[$"  [INI] Found [UnrealEd.EditorEngine] at line {engineSectionIndex + 1}"]);
-        _logger.LogInformation(Chalk.Cyan[$"  [INI] Current ModEditPackages in INI:"]);
+        _logger.LogInformation(LogColors.Info($"  [INI] Found [UnrealEd.EditorEngine] at line {engineSectionIndex + 1}"));
+        _logger.LogInformation(LogColors.Info("  [INI] Current ModEditPackages in INI:"));
         for (int i = engineSectionIndex + 1; i < lines.Count && !lines[i].Trim().StartsWith("["); i++)
         {
             if (lines[i].Contains("ModEditPackages"))
-                _logger.LogInformation(Chalk.Cyan[$"    {lines[i].Trim()}"]);
+                _logger.LogInformation(LogColors.Info($"    {lines[i].Trim()}"));
         }
 
         // 1. ALWAYS remove existing entries for main mod and dependants to ensure they are moved to the END
         int mainModIndex = FindPackageInSection(lines, engineSectionIndex, mainModName);
         if (mainModIndex != -1)
         {
-            _logger.LogInformation(Chalk.Gray[$"  [INI] Removing existing entry for {mainModName} to move it to the end."]);
+            _logger.LogInformation(LogColors.Debug($"  [INI] Removing existing entry for {mainModName} to move it to the end."));
             lines.RemoveAt(mainModIndex);
             // Re-find the section index as it might have moved
             engineSectionIndex = FindLastSection(lines, "[UnrealEd.EditorEngine]");
@@ -253,7 +254,7 @@ public class IniHandler
 
         if (dependantPackages != null && dependantPackages.Count > 0)
         {
-            _logger.LogInformation(Chalk.Gray[$"  [INI] Removing existing entries for {dependantPackages.Count} dependents to move them after main mod."]);
+            _logger.LogInformation(LogColors.Debug($"  [INI] Removing existing entries for {dependantPackages.Count} dependents to move them after main mod."));
             RemovePackagesFromSection(lines, engineSectionIndex, dependantPackages);
             // Re-find the section index as it might have moved
             engineSectionIndex = FindLastSection(lines, "[UnrealEd.EditorEngine]");
@@ -261,7 +262,7 @@ public class IniHandler
 
         // 2. Insert main mod at the end of the section
         int insertPoint = FindSectionEnd(lines, engineSectionIndex);
-        _logger.LogInformation(Chalk.Green[$"  [INI] Injecting {mainModName} at the end of [UnrealEd.EditorEngine] (Line {insertPoint + 1})"]);
+        _logger.LogInformation(LogColors.Success($"  [INI] Injecting {mainModName} at the end of [UnrealEd.EditorEngine] (Line {insertPoint + 1})"));
         lines.Insert(insertPoint, $"+ModEditPackages={mainModName}");
         mainModIndex = insertPoint;
 
@@ -271,17 +272,17 @@ public class IniHandler
              insertPoint = mainModIndex + 1;
              foreach(var dep in dependantPackages)
              {
-                 _logger.LogInformation(Chalk.Green[$"  [INI] Injecting dependent {dep} after main mod (Line {insertPoint + 1})"]);
+                 _logger.LogInformation(LogColors.Success($"  [INI] Injecting dependent {dep} after main mod (Line {insertPoint + 1})"));
                  lines.Insert(insertPoint, $"+ModEditPackages={dep}");
                  insertPoint++;
              }
         }
-        
-        _logger.LogInformation(Chalk.Cyan[$"  [INI] Final ModEditPackages in INI:"]);
+
+        _logger.LogInformation(LogColors.Info($"  [INI] Final ModEditPackages in INI:"));
         for (int i = engineSectionIndex + 1; i < lines.Count && !lines[i].Trim().StartsWith("["); i++)
         {
             if (lines[i].Contains("ModEditPackages"))
-                _logger.LogInformation(Chalk.Cyan[$"    {lines[i].Trim()}"]);
+                _logger.LogInformation(LogColors.Info($"    {lines[i].Trim()}"));
         }
     }
 

@@ -147,7 +147,7 @@ public class CompilationStep : IBuildStep
         if (!await _compiler.CompileBaseAsync(options, _receiver, ct)) return false;
 
         // 2. Compile Mod
-        if (passNumber == 2) await Task.Delay(2000, ct); // Small delay to clear file handles
+        if (passNumber == 2) await Task.Delay(BuildConstants.FileHandleClearDelayMs, ct); // Small delay to clear file handles
 
         // Compile only the main mod - dependent packages are specified in INI ModEditPackages
         string compileTarget = options.ModNameCanonical;

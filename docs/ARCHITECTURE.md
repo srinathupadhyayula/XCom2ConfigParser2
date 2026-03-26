@@ -1,10 +1,4 @@
-# X2ModCompiler Architecture Documentation
-
-**Current State** and **Proposed Unification Architecture**
-
----
-
-## Part 1: Current Architecture (As-Is)
+## Part 1: System Architecture
 
 ### 1.1 High-Level System Context
 
@@ -43,10 +37,11 @@
 │  │  ┌──────────────────────────────────────────────────┐  │   │
 │  │  │  CLI: XCom2ModCompiler.exe build --mod-name X    │  │   │
 │  │  │                                                   │  │   │
+│  │  │  • Modular Pipeline (IBuildStep architecture)     │  │   │
 │  │  │  • Compiles UnrealScript (.uc → .u)             │  │   │
 │  │  │  • Cooks assets (.umap → .umap)                 │  │   │
-│  │  │  • Packages mod for deployment                   │  │   │
-│  │  │  • Incremental builds                            │  │   │
+│  │  │  • Native File Mirroring (Zero Robocopy)          │  │   │
+│  │  │  • Incremental builds with BuildTracker           │  │   │
 │  │  └──────────────────────────────────────────────────┘  │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │         │                                                      │
@@ -180,25 +175,20 @@ Data Flow:
 │  ┌──────────────────────────────────────────────────────────────┐  │
 │  │  Application/ (Build Orchestration)                          │  │
 │  │  ┌──────────────────────────────────────────────────────┐   │  │
-│  │  │  BuildController (1056 lines)                        │   │  │
-│  │  │                                                       │   │  │
-│  │  │  Build Pipeline Steps:                                │   │  │
-│  │  │  0. Project Synchronization (.x2proj ItemGroups)      │   │  │
-│  │  │  1. Preparation (mirror to staging)                   │   │  │
-│  │  │  2. Src folder copy to SDK                            │   │  │
-│  │  │  3. Generate .XComMod file                            │   │  │
-│  │  │  4. Convert localization (UTF-8→UTF-16)              │   │  │
-│  │  │  5. Selective clean (incremental build)               │   │  │
-│  │  │  6. Shader precompilation                             │   │  │
-│  │  │  7. Pre-make hooks                                    │   │  │
-│  │  │  8. Copy dependency sources                           │   │  │
-│  │  │  9. Compile Base (XComGame.u)                         │   │  │
-│  │  │  10. Compile Mod (two-pass if dependent pkgs)         │   │  │
-│  │  │  11. Copy script packages                             │   │  │
-│  │  │  12. Cook Highlander packages                         │   │  │
-│  │  │  13. Asset cooking (optional)                         │   │  │
-│  │  │  14. Copy missing uncooked                            │   │  │
-│  │  │  15. Final deployment                                 │   │  │
+│  │  BuildController                                         │   │  │
+│  │                                                       │   │  │
+│  │  Build Pipeline (IBuildStep):                         │   │  │
+│  │  1. ProjectSyncStep (Synchronize .x2proj)             │   │  │
+│  │  2. StagingStep (Mirror to staging)                   │   │  │
+│  │  3. MetadataStep (Generate .XComMod)                  │   │  │
+│  │  4. CleanupStep (Selective clean / Cache cleanup)     │   │  │
+│  │  5. CompilationStep (Invoke ScriptCompiler)           │   │  │
+│  │  6. CookingStep (Invoke AssetCooker)                  │   │  │
+│  │  7. UncookedCopyStep (Copy missing uncooked)          │   │  │
+│  │  8. ShaderStep (Precompile shaders)                   │   │  │
+│  │  9. MirrorStep (Final deployment)                     │   │  │
+│  │  10. ValidationStep (Integrated Config Validation)    │   │  │
+│  │  • BuildTracker (State management & Fingerprints)     │   │  │
 │  │  └──────────────────────────────────────────────────────┘   │  │
 │  └──────────────────────────────────────────────────────────────┘  │
 │                              │                                       │
@@ -216,10 +206,10 @@ Data Flow:
 │  ┌──────────────────────────────────────────────────────────────┐  │
 │  │  Utilities/ (Helper Classes)                                 │  │
 │  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │  │
-│  │  │ProcessRunner │  │ FileMirror   │  │ IniHandler   │      │  │
-│  │  │              │  │ (robocopy)   │  │              │      │  │
-│  │  │ • Run extern │  │ • Mirror     │  │ • Two-pass   │  │  │
-│  │  │   processes  │  │   directories│  │   compilation│  │  │
+│  │  │ProcessRunner │  │  FileMirror  │  │ IniHandler   │      │  │
+│  │  │              │  │  (Native C#) │  │              │      │  │
+│  │  │ • Run extern │  │ • Parity with │  │ • Two-pass   │  │  │
+│  │  │   processes  │  │   robocopy   │  │   compilation│  │  │
 │  │  │              │  │              │  │              │      │  │
 │  │  └──────────────┘  └──────────────┘  └──────────────┘      │  │
 │  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │  │

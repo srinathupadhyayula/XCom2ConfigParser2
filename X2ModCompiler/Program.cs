@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Threading;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -8,6 +9,7 @@ using X2ModCompiler.Compilation;
 using X2ModCompiler.Configuration;
 using X2ModCompiler.Core.Validation;
 using X2ModCompiler.Cooking;
+using X2ModCompiler.DependencyInjection;
 using X2ModCompiler.Tracking;
 using X2ModCompiler.Utilities;
 using ZLogger;
@@ -189,7 +191,7 @@ public class BuildCommand : AsyncCommand<BuildSettings>
             try
             {
                 var settingsJson = File.ReadAllText(settingsPath);
-                var iniRoots = ExtractIniRoots(settingsJson);
+                var iniRoots = SettingsJsonParser.ExtractIniRoots(settingsJson);
                 foreach (var root in iniRoots)
                 {
                     var absoluteRoot = Path.IsPathRooted(root) ? root : Path.Combine(options.ProjectRoot, root);
@@ -205,31 +207,12 @@ public class BuildCommand : AsyncCommand<BuildSettings>
             }
         }
 
-        var loggerFactory = LoggerFactory.Create(builder =>
-        {
-            builder.AddZLoggerConsole();
-            builder.SetMinimumLevel(LogLevel.Information);
-        });
+        // Use DI container for dependency injection
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        services.AddX2ModCompiler(options);
+        var serviceProvider = services.BuildServiceProvider();
 
-        // Initialize Core Library Components
-        options.SyncToParserSettings();
-        var syntaxValidator = new SyntaxValidator();
-        var modSrcCache = new ModSrcPathCache(options.ParserSettings, loggerFactory.CreateLogger<ModSrcPathCache>());
-        var fileProcessor = new FileProcessor(syntaxValidator, options.ParserSettings, structValidationEnabled: true, loggerFactory, modSrcCache);
-
-        // var logger = loggerFactory.CreateLogger<BuildController>();
-        var runner = new ProcessRunner(loggerFactory.CreateLogger<ProcessRunner>());
-        var mirror = new ModernFileMirror(runner);
-
-        var compiler = new ScriptCompiler(options.CommandletPath, options.SdkPath, options.GamePath, runner, loggerFactory.CreateLogger<ScriptCompiler>());
-        var tracker = new BuildTracker(options.BuildCachePath, loggerFactory.CreateLogger<BuildTracker>());
-        var cooker = new AssetCooker(options.SdkPath, options.GamePath, options.BuildCachePath, runner, mirror, tracker, loggerFactory, loggerFactory.CreateLogger<AssetCooker>());
-        var shaderPrecompiler = new ShaderPrecompiler(runner, mirror, loggerFactory, loggerFactory.CreateLogger<ShaderPrecompiler>());
-        var missingUncookedCopier = new MissingUncookedCopier(mirror, loggerFactory.CreateLogger<MissingUncookedCopier>());
-        var projectSynchronizer = new ProjectSynchronizer(loggerFactory.CreateLogger<ProjectSynchronizer>());
-        var scriptCleaner = new ScriptCleaner(loggerFactory.CreateLogger<ScriptCleaner>());
-
-        var controller = new BuildController(options, loggerFactory, tracker, compiler, cooker, mirror, runner, shaderPrecompiler, missingUncookedCopier, projectSynchronizer, fileProcessor, scriptCleaner);
+        var controller = serviceProvider.GetRequiredService<BuildController>();
 
         var result = await controller.InvokeBuildAsync();
 
@@ -247,31 +230,6 @@ public class BuildCommand : AsyncCommand<BuildSettings>
             }
             return 1;
         }
-    }
-
-    private static List<string> ExtractIniRoots(string json)
-    {
-        var roots = new List<string>();
-        try
-        {
-            using var doc = JsonDocument.Parse(json, new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip });
-            if (doc.RootElement.TryGetProperty("xcom.configParser.iniRoots", out var iniRootsProperty) && iniRootsProperty.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var element in iniRootsProperty.EnumerateArray())
-                {
-                    if (element.ValueKind == JsonValueKind.String)
-                    {
-                        var value = element.GetString();
-                        if (!string.IsNullOrEmpty(value)) roots.Add(value);
-                    }
-                }
-            }
-        }
-        catch
-        {
-            // Silently fail if JSON is invalid
-        }
-        return roots;
     }
 }
 
@@ -314,7 +272,7 @@ public class ValidateCommand : AsyncCommand<BuildSettings>
             try
             {
                 var settingsJson = File.ReadAllText(vscSettingsPath);
-                var iniRoots = ExtractIniRoots(settingsJson);
+                var iniRoots = SettingsJsonParser.ExtractIniRoots(settingsJson);
                 foreach (var root in iniRoots)
                 {
                     var absoluteRoot = Path.IsPathRooted(root) ? root : Path.Combine(options.ProjectRoot, root);
@@ -330,59 +288,16 @@ public class ValidateCommand : AsyncCommand<BuildSettings>
             }
         }
 
-        var loggerFactory = LoggerFactory.Create(builder =>
-        {
-            builder.AddZLoggerConsole();
-            builder.SetMinimumLevel(LogLevel.Information);
-        });
+        // Use DI container for dependency injection
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        services.AddX2ModCompiler(options);
+        var serviceProvider = services.BuildServiceProvider();
 
-        options.SyncToParserSettings();
-        var syntaxValidator = new SyntaxValidator();
-        var modSrcCache = new ModSrcPathCache(options.ParserSettings, loggerFactory.CreateLogger<ModSrcPathCache>());
-        var fileProcessor = new FileProcessor(syntaxValidator, options.ParserSettings, structValidationEnabled: true, loggerFactory, modSrcCache);
-
-        // var logger = loggerFactory.CreateLogger<BuildController>();
-        var runner = new ProcessRunner(loggerFactory.CreateLogger<ProcessRunner>());
-        var mirror = new ModernFileMirror(runner);
-
-        var compiler = new ScriptCompiler(options.CommandletPath, options.SdkPath, options.GamePath, runner, loggerFactory.CreateLogger<ScriptCompiler>());
-        var tracker = new BuildTracker(options.BuildCachePath, loggerFactory.CreateLogger<BuildTracker>());
-        var cooker = new AssetCooker(options.SdkPath, options.GamePath, options.BuildCachePath, runner, mirror, tracker, loggerFactory, loggerFactory.CreateLogger<AssetCooker>());
-        var shaderPrecompiler = new ShaderPrecompiler(runner, mirror, loggerFactory, loggerFactory.CreateLogger<ShaderPrecompiler>());
-        var missingUncookedCopier = new MissingUncookedCopier(mirror, loggerFactory.CreateLogger<MissingUncookedCopier>());
-        var projectSynchronizer = new ProjectSynchronizer(loggerFactory.CreateLogger<ProjectSynchronizer>());
-        var scriptCleaner = new ScriptCleaner(loggerFactory.CreateLogger<ScriptCleaner>());
-
-        var controller = new BuildController(options, loggerFactory, tracker, compiler, cooker, mirror, runner, shaderPrecompiler, missingUncookedCopier, projectSynchronizer, fileProcessor, scriptCleaner);
+        var controller = serviceProvider.GetRequiredService<BuildController>();
 
         var success = await controller.InvokeValidationAsync();
-        
-        return success ? 0 : 1;
-    }
 
-    private static List<string> ExtractIniRoots(string json)
-    {
-        var roots = new List<string>();
-        try
-        {
-            using var doc = JsonDocument.Parse(json, new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip });
-            if (doc.RootElement.TryGetProperty("xcom.configParser.iniRoots", out var iniRootsProperty) && iniRootsProperty.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var element in iniRootsProperty.EnumerateArray())
-                {
-                    if (element.ValueKind == JsonValueKind.String)
-                    {
-                        var value = element.GetString();
-                        if (!string.IsNullOrEmpty(value)) roots.Add(value);
-                    }
-                }
-            }
-        }
-        catch
-        {
-            // Silently fail if JSON is invalid
-        }
-        return roots;
+        return success ? 0 : 1;
     }
 }
 
@@ -409,29 +324,12 @@ public class CleanCommand : AsyncCommand<BuildSettings>
             ModDestinationPath = settings.ModDestinationPath
         };
 
-        var loggerFactory = LoggerFactory.Create(builder =>
-        {
-            builder.AddZLoggerConsole();
-            builder.SetMinimumLevel(LogLevel.Information);
-        });
+        // Use DI container for dependency injection
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        services.AddX2ModCompiler(options);
+        var serviceProvider = services.BuildServiceProvider();
 
-        // Still need to satisfy BuildController constructor even for clean
-        options.SyncToParserSettings();
-        var syntaxValidator = new SyntaxValidator();
-        var modSrcCache = new ModSrcPathCache(options.ParserSettings, loggerFactory.CreateLogger<ModSrcPathCache>());
-        var fileProcessor = new FileProcessor(syntaxValidator, options.ParserSettings, structValidationEnabled: true, loggerFactory, modSrcCache);
-
-        var runner = new ProcessRunner(loggerFactory.CreateLogger<ProcessRunner>());
-        var mirror = new ModernFileMirror(runner);
-        var compiler = new ScriptCompiler(options.CommandletPath, options.SdkPath, options.GamePath, runner, loggerFactory.CreateLogger<ScriptCompiler>());
-        var tracker = new BuildTracker(options.BuildCachePath, loggerFactory.CreateLogger<BuildTracker>());
-        var cooker = new AssetCooker(options.SdkPath, options.GamePath, options.BuildCachePath, runner, mirror, tracker, loggerFactory, loggerFactory.CreateLogger<AssetCooker>());
-        var shaderPrecompiler = new ShaderPrecompiler(runner, mirror, loggerFactory, loggerFactory.CreateLogger<ShaderPrecompiler>());
-        var missingUncookedCopier = new MissingUncookedCopier(mirror, loggerFactory.CreateLogger<MissingUncookedCopier>());
-        var projectSynchronizer = new ProjectSynchronizer(loggerFactory.CreateLogger<ProjectSynchronizer>());
-        var scriptCleaner = new ScriptCleaner(loggerFactory.CreateLogger<ScriptCleaner>());
-
-        var controller = new BuildController(options, loggerFactory, tracker, compiler, cooker, mirror, runner, shaderPrecompiler, missingUncookedCopier, projectSynchronizer, fileProcessor, scriptCleaner);
+        var controller = serviceProvider.GetRequiredService<BuildController>();
 
         var success = await controller.InvokeCleanAsync(cancellationToken);
         if (success)

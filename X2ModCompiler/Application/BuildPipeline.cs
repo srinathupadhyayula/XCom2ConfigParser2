@@ -3,6 +3,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using X2ModCompiler.Configuration;
 using X2ModCompiler.Compilation;
+using X2ModCompiler.Utilities;
 
 namespace X2ModCompiler.Application;
 
@@ -33,7 +34,7 @@ public class BuildPipeline
         foreach (var step in _steps)
         {
             var sw = Stopwatch.StartNew();
-            _logger.LogInformation(Chalk.Bold.Blue[$">>> STARTING STEP: {step.Name}"]);
+            _logger.LogInformation(LogColors.StepHeader(step.Name));
             
             bool success = false;
             string? errorMessage = null;
@@ -45,7 +46,7 @@ public class BuildPipeline
             }
             catch (Exception ex)
             {
-                _logger.LogError(Chalk.Red[$"Step {step.Name} failed with exception: {ex.Message}"]);
+                _logger.LogError(LogColors.Error($"Step {step.Name} failed with exception: {ex.Message}"));
                 errorMessage = ex.Message;
                 success = false;
             }
@@ -55,7 +56,7 @@ public class BuildPipeline
 
             if (!success)
             {
-                _logger.LogError(Chalk.Bold.Red[$"Exiting pipeline: {step.Name} failed. {errorMessage}"]);
+                _logger.LogError(LogColors.Error($"Exiting pipeline: {step.Name} failed. {errorMessage}"));
                 break;
             }
         }
