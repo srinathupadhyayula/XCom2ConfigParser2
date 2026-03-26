@@ -55,12 +55,12 @@ public class CompilationStep : IBuildStep
                 1);
 
         _logger.LogInformation(Chalk.Cyan[$"[DEBUG] Target Configuration File: {targetIni}"]);
-        string currentContent = await File.ReadAllTextAsync(targetIni, ct);
 
-        var dependentPackages = _iniHandler.GetDependantPackages(currentContent);
-        bool twoPassRequired = _iniHandler.IsTwoPassNeeded(currentContent) || options.TwoPassCompilation;
+        // Use dependent packages detected by PrepareIniStep (or from CLI/settings.json)
+        var dependentPackages = options.DependentPackages;
+        bool twoPassRequired = dependentPackages.Count > 0 || options.TwoPassCompilation;
 
-        _logger.LogInformation(Chalk.Magenta[$"[DEBUG] Dependant Packages Found: {dependentPackages.Count}"]);
+        _logger.LogInformation(Chalk.Magenta[$"[DEBUG] Dependent Packages for Compilation: {dependentPackages.Count}"]);
         foreach (var pkg in dependentPackages)
         {
             _logger.LogInformation(Chalk.Gray[$"  -> {pkg}"]);
@@ -83,7 +83,7 @@ public class CompilationStep : IBuildStep
             }
 
             UsedTwoPass = true;
-            return await ExecuteTwoPassAsync(options, currentContent, targetIni, dependentPackages, ct);
+            return await ExecuteTwoPassAsync(options, targetIni, dependentPackages, ct);
         }
         else
         {
@@ -121,7 +121,7 @@ public class CompilationStep : IBuildStep
         return true;
     }
 
-    private async Task<bool> ExecuteTwoPassAsync(BuildOptions options, string originalContent, string targetIni,
+    private async Task<bool> ExecuteTwoPassAsync(BuildOptions options, string targetIni,
         List<string> dependentPackages, CancellationToken ct)
     {
         // INI was already modified by PrepareIniStep - just compile
@@ -207,9 +207,13 @@ public class CompilationStep : IBuildStep
     {
         if (!await _compiler.CompileBaseAsync(options, _receiver, ct)) return false;
 
+        // Compile main mod + all dependent packages (matching two-pass behavior)
         var compileTarget = options.ModNameCanonical;
         if (options.DependentPackages.Count > 0)
+        {
             compileTarget = $"{options.ModNameCanonical} {string.Join(" ", options.DependentPackages)}";
+            _logger.LogInformation(Chalk.Cyan[$"[DEBUG] Compiling with {options.DependentPackages.Count} dependent packages: {compileTarget}"]);
+        }
 
         var success = await _compiler.CompileModAsync(compileTarget, options.StagingPath, options, _receiver, ct);
 

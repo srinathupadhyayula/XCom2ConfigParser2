@@ -125,9 +125,10 @@ public class BuildController
             }
 
             // 3. Prepare INI for compilation (ensure ModEditPackages includes dependents)
+            // This step also detects two-pass requirement and populates options.DependentPackages
             if (!_options.ValidateConfig)
             {
-                pipeline.AddStep(new Steps.PrepareIniStep(iniHandler, _loggerFactory.CreateLogger<Steps.PrepareIniStep>()));
+                pipeline.AddStep(new Steps.PrepareIniStep(iniHandler, _options, _loggerFactory.CreateLogger<Steps.PrepareIniStep>()));
             }
 
             // 4. Copy Sources to SDK (before compilation - mimics _CopyToSrc from build_common.ps1)

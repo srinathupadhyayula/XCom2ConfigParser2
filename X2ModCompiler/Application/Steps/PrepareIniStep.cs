@@ -11,15 +11,19 @@ namespace X2ModCompiler.Application.Steps;
 /// 
 /// For single-pass compilation: NO INI modification (pure build_common parity)
 /// For two-pass compilation: INI is modified once before Phase 1, restored after Phase 2
+/// 
+/// Also detects two-pass requirement and stores it in BuildOptions for CompilationStep.
 /// </summary>
 public class PrepareIniStep : IBuildStep
 {
     private readonly IniHandler _iniHandler;
+    private readonly BuildOptions _options;
     private readonly ILogger<PrepareIniStep> _logger;
 
-    public PrepareIniStep(IniHandler iniHandler, ILogger<PrepareIniStep> logger)
+    public PrepareIniStep(IniHandler iniHandler, BuildOptions options, ILogger<PrepareIniStep> logger)
     {
         _iniHandler = iniHandler;
+        _options = options;
         _logger = logger;
     }
 
@@ -34,10 +38,24 @@ public class PrepareIniStep : IBuildStep
             return true;
         }
 
-        // Check if two-pass is required
+        // Check if two-pass is required BEFORE modifying INI
         var currentContent = await File.ReadAllTextAsync(targetIni, ct);
         var dependentPackages = _iniHandler.GetDependantPackages(currentContent);
         bool twoPassRequired = _iniHandler.IsTwoPassNeeded(currentContent) || options.TwoPassCompilation;
+
+        // Store detected two-pass requirement and dependent packages for CompilationStep
+        if (twoPassRequired && dependentPackages.Count > 0)
+        {
+            // Add detected dependent packages to options so CompilationStep can use them
+            foreach (var pkg in dependentPackages)
+            {
+                if (!options.DependentPackages.Contains(pkg))
+                {
+                    options.DependentPackages.Add(pkg);
+                }
+            }
+            _logger.LogInformation(Chalk.Cyan[$"[INI] Detected {dependentPackages.Count} dependent packages from INI for two-pass compilation."]);
+        }
 
         if (!twoPassRequired)
         {
