@@ -2,26 +2,24 @@ using Microsoft.Extensions.Logging;
 using X2ModCompiler.Tracking;
 using X2ModCompiler.Compilation;
 using X2ModCompiler.Configuration;
+using X2ModCompiler.Utilities;
 
 namespace X2ModCompiler.Application.Steps;
 
 /// <summary>
 /// Precompiles DirectX shaders and manages localized TFC/Shader assets for the mod.
 /// </summary>
-public class ShaderStep : IBuildStep
+public class ShaderStep : BuildStepBase
 {
     private readonly ShaderPrecompiler _shaderPrecompiler;
-    private readonly ILogger<ShaderStep> _logger;
 
     public ShaderStep(ShaderPrecompiler shaderPrecompiler, ILogger<ShaderStep> logger)
+        : base("Shader Precompilation", logger)
     {
         _shaderPrecompiler = shaderPrecompiler;
-        _logger = logger;
     }
 
-    public string Name => "Shader Precompilation";
-
-    public async Task<bool> ExecuteAsync(BuildOptions options, CancellationToken ct)
+    protected override async Task<bool> ExecuteStepAsync(BuildOptions options, CancellationToken ct)
     {
         if (options.CompileOnly)
         {
