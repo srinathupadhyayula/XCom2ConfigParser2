@@ -195,7 +195,7 @@ public class BuildController
 
         // 9. Script Compilation
         {
-            var receiver = new MakeOutputReceiver(new[] { _options.ModSrcRoot }.Concat(_options.IncludePaths).ToArray(), _loggerFactory.CreateLogger<MakeOutputReceiver>());
+            var receiver = new MakeOutputReceiver(new[] { _options.ModSrcRoot }.Concat(_options.IncludePaths).ToArray(), _options.SdkPath, _loggerFactory.CreateLogger<MakeOutputReceiver>());
             compilationStep = new Steps.CompilationStep(_services.Compiler, receiver, _loggerFactory.CreateLogger<Steps.CompilationStep>());
             pipeline.AddStep(compilationStep);
         }

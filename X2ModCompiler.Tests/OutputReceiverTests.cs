@@ -100,7 +100,7 @@ public class OutputReceiverTests : TestBase
         Directory.CreateDirectory(Path.GetDirectoryName(testFile)!);
         File.WriteAllText(testFile, "test");
 
-        var receiver = new MakeOutputReceiver(new[] { sourcePath }, NullLogger.Instance);
+        var receiver = new MakeOutputReceiver(new[] { sourcePath }, @"C:\SDK", NullLogger.Instance);
 
         // Act - this should translate the path
         var sdkPath = @"C:\XCOM 2 War of the Chosen SDK\Development\Src\Test.uc(10) : Error";
@@ -114,7 +114,7 @@ public class OutputReceiverTests : TestBase
     public void MakeOutputReceiver_DetectsError()
     {
         // Arrange
-        var receiver = new MakeOutputReceiver(new[] { @"C:\Source" }, NullLogger.Instance);
+        var receiver = new MakeOutputReceiver(new[] { @"C:\Source" }, @"C:\SDK", NullLogger.Instance);
         var errorLine = @"C:\Path\File.uc(10) : Error: Something went wrong";
 
         // Act & Assert - should not throw, should detect error
@@ -126,7 +126,7 @@ public class OutputReceiverTests : TestBase
     public void MakeOutputReceiver_DetectsWarning()
     {
         // Arrange
-        var receiver = new MakeOutputReceiver(new[] { @"C:\Source" }, NullLogger.Instance);
+        var receiver = new MakeOutputReceiver(new[] { @"C:\Source" }, @"C:\SDK", NullLogger.Instance);
         var warningLine = @"C:\Path\File.uc(10) : Warning: Something might be wrong";
 
         // Act & Assert
@@ -138,7 +138,7 @@ public class OutputReceiverTests : TestBase
     public void MakeOutputReceiver_HandlesNullLine()
     {
         // Arrange
-        var receiver = new MakeOutputReceiver(new[] { @"C:\Source" }, NullLogger.Instance);
+        var receiver = new MakeOutputReceiver(new[] { @"C:\Source" }, @"C:\SDK", NullLogger.Instance);
 
         // Act & Assert - should not throw
         var ex = Record.Exception(() => receiver.ParseLine(null));

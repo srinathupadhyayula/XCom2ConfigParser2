@@ -177,13 +177,15 @@ public class ModcookReceiver : OutputReceiver
 public class MakeOutputReceiver : OutputReceiver
 {
     private readonly string[] _reversePaths;
+    private readonly string _sdkPath;
     private const string SdkPathPattern = @"(?i)\\XCOM 2 War of the Chosen SDK\\";
     private string? _lastLineWritten = null;
 
-    public MakeOutputReceiver(string[] reversePaths, ILogger logger) : base(logger)
+    public MakeOutputReceiver(string[] reversePaths, string sdkPath, ILogger logger) : base(logger)
     {
         // Since later paths overwrite earlier files, check paths in reverse order
         _reversePaths = reversePaths.Reverse().ToArray();
+        _sdkPath = sdkPath;
     }
 
     public override void ParseLine(string? line)
@@ -262,19 +264,27 @@ public class MakeOutputReceiver : OutputReceiver
 
         var origPath = match.Groups[1].Value;
 
-        // Find actual file in reverse path order
+        // Find actual file in reverse path order.
+        // The commandlet reports paths under the SDK's Development\Src; we want to
+        // translate them to the real source location (mod local Src or include paths).
         foreach (var checkPath in _reversePaths)
         {
             try
             {
-                // Create regex pattern from SDK path
-                var pattern = Regex.Escape($"{Path.Combine(checkPath, "Development", "Src")}");
-                var testPath = Regex.Replace(origPath, pattern, checkPath, RegexOptions.IgnoreCase);
-                
-                if (File.Exists(testPath))
+                // The SDK staging root we want to strip off the original path.
+                var sdkStagingRoot = Path.Combine(_sdkPath, "Development", "Src");
+                var normalizedOrig = origPath.Replace("/", "\\");
+                var normalizedStaging = sdkStagingRoot.Replace("/", "\\");
+
+                if (normalizedOrig.StartsWith(normalizedStaging, StringComparison.OrdinalIgnoreCase))
                 {
-                    var fullPath = Path.GetFullPath(testPath);
-                    return line.Replace(origPath, fullPath);
+                    var remainder = normalizedOrig[normalizedStaging.Length..].TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                    var testPath = Path.Combine(checkPath, remainder);
+                    if (File.Exists(testPath))
+                    {
+                        var fullPath = Path.GetFullPath(testPath);
+                        return line.Replace(origPath, fullPath);
+                    }
                 }
             }
             catch
