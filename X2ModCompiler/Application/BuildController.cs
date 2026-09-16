@@ -157,56 +157,62 @@ public class BuildController
         // BUILD PIPELINE - Exact parity with build_common.ps1
         // ============================================================
 
+        // 0. Config Validation (NON-FATAL) - runs first when enabled, then build continues
+        if (_options.ValidateConfig)
+        {
+            pipeline.AddStep(new Steps.ValidationStep(_services.FileProcessor, _loggerFactory.CreateLogger<Steps.ValidationStep>()));
+        }
+
         // 1. Prepare INI (TWO-PASS ONLY)
-        if (!_options.ValidateConfig)
+        if (!_options.CompileOnly)
         {
             pipeline.AddStep(new Steps.PrepareIniStep(iniHandler, _options, _loggerFactory.CreateLogger<Steps.PrepareIniStep>()));
         }
 
         // 2. Regenerate ItemGroup
-        if (!_options.ValidateConfig)
+        if (!_options.CompileOnly)
         {
             pipeline.AddStep(new Steps.ProjectSyncStep(_services.ProjectSynchronizer, _loggerFactory.CreateLogger<Steps.ProjectSyncStep>()));
         }
 
         // 3. Clean Additional Mods
-        if (!_options.ValidateConfig && _options.CleanMods.Count > 0)
+        if (!_options.CompileOnly && _options.CleanMods.Count > 0)
         {
             pipeline.AddStep(new Steps.CleanAdditionalStep(_options, _loggerFactory.CreateLogger<Steps.CleanAdditionalStep>()));
         }
 
         // 4. Copy Mod to SDK
-        if (!_options.ValidateConfig)
+        if (!_options.CompileOnly)
         {
             pipeline.AddStep(new Steps.CopyModToSdkStep(_loggerFactory.CreateLogger<Steps.CopyModToSdkStep>()));
         }
 
         // 5. Convert Localization
-        if (!_options.ValidateConfig)
+        if (!_options.CompileOnly)
         {
             pipeline.AddStep(new Steps.LocalizationStep(_loggerFactory.CreateLogger<Steps.LocalizationStep>()));
         }
 
         // 6. Copy Sources to SDK
-        if (!_options.ValidateConfig)
+        if (!_options.CompileOnly)
         {
             pipeline.AddStep(new Steps.CopyToSrcStep(_loggerFactory.CreateLogger<Steps.CopyToSrcStep>()));
         }
 
         // 7. Run Pre-Make Hooks
-        if (!_options.ValidateConfig && _options.PreMakeHooks.Count > 0)
+        if (!_options.CompileOnly && _options.PreMakeHooks.Count > 0)
         {
             pipeline.AddStep(new Steps.PreMakeHooksStep(_options, _loggerFactory.CreateLogger<Steps.PreMakeHooksStep>()));
         }
 
         // 8. Check Clean Compiled
-        if (!_options.ValidateConfig)
+        if (!_options.CompileOnly)
         {
             pipeline.AddStep(new Steps.CheckCleanCompiledStep(_services.Tracker, _services.ScriptCleaner, _loggerFactory.CreateLogger<Steps.CheckCleanCompiledStep>()));
         }
 
         // 9. Script Compilation
-        if (!_options.ValidateConfig)
+        if (!_options.CompileOnly)
         {
             var receiver = new MakeOutputReceiver(new[] { _options.ModSrcRoot }.Concat(_options.IncludePaths).ToArray(), _loggerFactory.CreateLogger<MakeOutputReceiver>());
             compilationStep = new Steps.CompilationStep(_services.Compiler, receiver, _loggerFactory.CreateLogger<Steps.CompilationStep>());
@@ -214,13 +220,13 @@ public class BuildController
         }
 
         // 10. Copy Script Packages
-        if (!_options.ValidateConfig && !_options.CompileOnly)
+        if (!_options.CompileOnly)
         {
             pipeline.AddStep(new Steps.CopyScriptPackagesStep(_loggerFactory.CreateLogger<Steps.CopyScriptPackagesStep>()));
         }
 
         // 11. Asset Processing
-        if (!(_options.CompileOnly || _options.ValidateConfig))
+        if (!_options.CompileOnly)
         {
             var contentOptions = LoadContentOptions();
             pipeline.AddStep(new Steps.ShaderStep(_services.ShaderPrecompiler, _loggerFactory.CreateLogger<Steps.ShaderStep>()));
@@ -229,21 +235,15 @@ public class BuildController
         }
 
         // 12. Final Copy
-        if (!(_options.CompileOnly || _options.ValidateConfig))
+        if (!_options.CompileOnly)
         {
             pipeline.AddStep(new Steps.FinalCopyStep(_loggerFactory.CreateLogger<Steps.FinalCopyStep>()));
         }
 
         // 13. Script Cleanup
-        if (!(_options.CompileOnly || _options.ValidateConfig) && !_options.Debug)
+        if (!_options.CompileOnly && !_options.Debug)
         {
             pipeline.AddStep(new Steps.ScriptCleanupStep(_loggerFactory.CreateLogger<Steps.ScriptCleanupStep>()));
-        }
-
-        // 14. Optional Validation
-        if (_options.ValidateConfig)
-        {
-            pipeline.AddStep(new Steps.ValidationStep(_services.FileProcessor, _loggerFactory.CreateLogger<Steps.ValidationStep>()));
         }
 
         _logger.LogDebug($"Build pipeline initialized with {pipeline.GetStepCount()} steps.");

@@ -151,6 +151,51 @@ public class BuildControllerTests : TestBase
     }
 
     [Fact]
+    public async Task InvokeBuildAsync_RunsValidationFirst_ThenCompilation_WhenValidateConfigTrue()
+    {
+        await using var temp = new TempDirectory();
+        var options = CreateValidOptions(temp.Path);
+
+        // Create dummy directories to bypass validation
+        Directory.CreateDirectory(options.SdkPath);
+        Directory.CreateDirectory(options.GamePath);
+        Directory.CreateDirectory(options.ProjectRoot);
+        Directory.CreateDirectory(options.ModSrcRoot);
+        File.WriteAllText(Path.Combine(options.ProjectRoot, options.ModName + ".x2proj"), "<Project></Project>");
+
+        var controller = CreateController(options);
+
+        options.ValidateConfig = true;
+
+        _compiler.CompileBaseAsync(Arg.Any<BuildOptions>(), Arg.Any<OutputReceiver>(), Arg.Any<CancellationToken>())
+                 .Returns(Task.FromResult(true));
+        _compiler.CompileModAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<BuildOptions>(), Arg.Any<OutputReceiver>(), Arg.Any<CancellationToken>())
+                 .Returns(Task.FromResult(true));
+        _cooker.CookAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ContentOptions>(), Arg.Any<BuildOptions>(), Arg.Any<CancellationToken>())
+                 .Returns(Task.FromResult(true));
+        _shaderPrecompiler.PrecompileAsync(Arg.Any<BuildOptions>(), Arg.Any<CancellationToken>())
+                 .Returns(Task.CompletedTask);
+        _missingUncookedCopier.CopyMissingAsync(Arg.Any<BuildOptions>(), Arg.Any<ContentOptions>(), Arg.Any<CancellationToken>())
+                 .Returns(Task.CompletedTask);
+
+        var result = await controller.InvokeBuildAsync(TestContext.Current.CancellationToken);
+
+        if (!result.Success)
+        {
+            foreach (var err in result.Errors) _logger.LogInformation(err);
+        }
+
+        if (!result.Success) Assert.Fail("Build failed with errors: " + string.Join("; ", result.Errors));
+        Assert.True(result.Success);
+
+        // Verify compilation still ran despite ValidateConfig being true
+        await _compiler.Received(1).CompileModAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<BuildOptions>(), Arg.Any<OutputReceiver>(), Arg.Any<CancellationToken>());
+
+        // Verify fingerprint saved
+        await _tracker.Received(1).SaveFingerprintAsync(Arg.Any<BuildFingerprint>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task InvokeBuildAsync_SkipsDeployment_WhenInCompileOnlyMode()
     {
         await using var temp = new TempDirectory();
