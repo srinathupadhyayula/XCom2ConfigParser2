@@ -36,12 +36,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ILoggerFactory>(sp =>
         {
             var logLevel = (Microsoft.Extensions.Logging.LogLevel)options.LogVerbosity;
-            // Use exe directory for log file (so it's alongside the exe in .scripts/)
+            // Use exe directory for log file (so it's alongside the exe)
             var exeDir = AppContext.BaseDirectory;
-            var logDir = Path.Combine(exeDir, ".scripts");
-            if (!Directory.Exists(logDir))
-                Directory.CreateDirectory(logDir);
-            var logPath = Path.Combine(logDir, "build.log");
+            var logPath = Path.Combine(exeDir, "build.log");
             return LoggerFactory.Create(builder =>
             {
                 builder.AddZLoggerConsole();
