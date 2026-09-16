@@ -158,61 +158,42 @@ public class BuildController
         // ============================================================
 
         // 0. Config Validation (NON-FATAL) - runs first when enabled, then build continues
-        if (_options.ValidateConfig)
+        if (_options.ValidateConfig && !_options.CompileOnly)
         {
             pipeline.AddStep(new Steps.ValidationStep(_services.FileProcessor, _loggerFactory.CreateLogger<Steps.ValidationStep>()));
         }
 
         // 1. Prepare INI (TWO-PASS ONLY)
-        if (!_options.CompileOnly)
-        {
-            pipeline.AddStep(new Steps.PrepareIniStep(iniHandler, _options, _loggerFactory.CreateLogger<Steps.PrepareIniStep>()));
-        }
+        pipeline.AddStep(new Steps.PrepareIniStep(iniHandler, _options, _loggerFactory.CreateLogger<Steps.PrepareIniStep>()));
 
         // 2. Regenerate ItemGroup
-        if (!_options.CompileOnly)
-        {
-            pipeline.AddStep(new Steps.ProjectSyncStep(_services.ProjectSynchronizer, _loggerFactory.CreateLogger<Steps.ProjectSyncStep>()));
-        }
+        pipeline.AddStep(new Steps.ProjectSyncStep(_services.ProjectSynchronizer, _loggerFactory.CreateLogger<Steps.ProjectSyncStep>()));
 
         // 3. Clean Additional Mods
-        if (!_options.CompileOnly && _options.CleanMods.Count > 0)
+        if (_options.CleanMods.Count > 0)
         {
             pipeline.AddStep(new Steps.CleanAdditionalStep(_options, _loggerFactory.CreateLogger<Steps.CleanAdditionalStep>()));
         }
 
         // 4. Copy Mod to SDK
-        if (!_options.CompileOnly)
-        {
-            pipeline.AddStep(new Steps.CopyModToSdkStep(_loggerFactory.CreateLogger<Steps.CopyModToSdkStep>()));
-        }
+        pipeline.AddStep(new Steps.CopyModToSdkStep(_loggerFactory.CreateLogger<Steps.CopyModToSdkStep>()));
 
         // 5. Convert Localization
-        if (!_options.CompileOnly)
-        {
-            pipeline.AddStep(new Steps.LocalizationStep(_loggerFactory.CreateLogger<Steps.LocalizationStep>()));
-        }
+        pipeline.AddStep(new Steps.LocalizationStep(_loggerFactory.CreateLogger<Steps.LocalizationStep>()));
 
         // 6. Copy Sources to SDK
-        if (!_options.CompileOnly)
-        {
-            pipeline.AddStep(new Steps.CopyToSrcStep(_loggerFactory.CreateLogger<Steps.CopyToSrcStep>()));
-        }
+        pipeline.AddStep(new Steps.CopyToSrcStep(_loggerFactory.CreateLogger<Steps.CopyToSrcStep>()));
 
         // 7. Run Pre-Make Hooks
-        if (!_options.CompileOnly && _options.PreMakeHooks.Count > 0)
+        if (_options.PreMakeHooks.Count > 0)
         {
             pipeline.AddStep(new Steps.PreMakeHooksStep(_options, _loggerFactory.CreateLogger<Steps.PreMakeHooksStep>()));
         }
 
         // 8. Check Clean Compiled
-        if (!_options.CompileOnly)
-        {
-            pipeline.AddStep(new Steps.CheckCleanCompiledStep(_services.Tracker, _services.ScriptCleaner, _loggerFactory.CreateLogger<Steps.CheckCleanCompiledStep>()));
-        }
+        pipeline.AddStep(new Steps.CheckCleanCompiledStep(_services.Tracker, _services.ScriptCleaner, _loggerFactory.CreateLogger<Steps.CheckCleanCompiledStep>()));
 
         // 9. Script Compilation
-        if (!_options.CompileOnly)
         {
             var receiver = new MakeOutputReceiver(new[] { _options.ModSrcRoot }.Concat(_options.IncludePaths).ToArray(), _loggerFactory.CreateLogger<MakeOutputReceiver>());
             compilationStep = new Steps.CompilationStep(_services.Compiler, receiver, _loggerFactory.CreateLogger<Steps.CompilationStep>());

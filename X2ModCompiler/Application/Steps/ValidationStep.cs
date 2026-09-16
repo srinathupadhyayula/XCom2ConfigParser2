@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using X2ModCompiler.Configuration;
 using X2ModCompiler.Core.Validation;
+using Kokuban;
 using X2ModCompiler.Core.Core;
 using X2ModCompiler.Utilities;
 using System.Collections.Generic;
@@ -39,14 +40,14 @@ public class ValidationStep : BuildStepBase
             foreach (var diag in result.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error))
             {
                 var formattedMessage = FormatDiagnostic(file, diag);
-                _logger.LogError(formattedMessage);
+                _logger.LogError(LogColors.Error(formattedMessage));
                 errorCount++;
             }
 
             foreach (var diag in result.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Warning))
             {
                 var formattedMessage = FormatDiagnostic(file, diag);
-                _logger.LogWarning(formattedMessage);
+                _logger.LogWarning(LogColors.Warning(formattedMessage));
                 warningCount++;
             }
 
@@ -60,21 +61,22 @@ public class ValidationStep : BuildStepBase
         options.ConfigValidationErrors = errorCount;
         options.ConfigValidationWarnings = warningCount;
 
-        // Log summary but ALWAYS return success (true)
+        // Log summary with color
         if (errorCount > 0)
         {
-            _logger.LogError($"Validation completed with {errorCount} error(s) and {warningCount} warning(s).");
+            _logger.LogError(LogColors.Error($"Validation completed with {errorCount} error(s) and {warningCount} warning(s)."));
+            return false;
         }
         else if (warningCount > 0)
         {
-            _logger.LogWarning($"Validation completed with {warningCount} warning(s).");
+            _logger.LogWarning(LogColors.Warning($"Validation completed with {warningCount} warning(s)."));
+            return true;
         }
         else
         {
-            _logger.LogInformation("Validation completed successfully.");
+            _logger.LogInformation(LogColors.Success("Validation completed successfully."));
+            return true;
         }
-
-        return true;
     }
 
     /// <summary>
