@@ -165,4 +165,30 @@ public static class SettingsJsonParser
         }
         return "";
     }
+
+    /// <summary>
+    /// Extracts the cache path from settings.json.
+    /// </summary>
+    public static string ExtractCachePath(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json, new JsonDocumentOptions 
+            { 
+                AllowTrailingCommas = true, 
+                CommentHandling = JsonCommentHandling.Skip 
+            });
+            
+            if (doc.RootElement.TryGetProperty("X2ModCompiler.cachePath", out var prop) 
+                && prop.ValueKind == JsonValueKind.String)
+            {
+                return prop.GetString() ?? "";
+            }
+        }
+        catch (JsonException)
+        {
+            // Ignore
+        }
+        return "";
+    }
 }

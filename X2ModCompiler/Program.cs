@@ -217,6 +217,14 @@ public class BuildCommand : AsyncCommand<BuildSettings>
                     }
                 }
 
+                // Extract cache path
+                var cachePath = SettingsJsonParser.ExtractCachePath(settingsJson);
+                if (!string.IsNullOrEmpty(cachePath))
+                {
+                    var absoluteCachePath = Path.IsPathRooted(cachePath) ? cachePath : Path.Combine(options.ProjectRoot, cachePath);
+                    options.ParserSettings.CachePath = absoluteCachePath;
+                }
+
                 // Extract Highlander paths
                 var communityHighlanderPath = SettingsJsonParser.ExtractCommunityHighlanderPath(settingsJson);
                 if (!string.IsNullOrEmpty(communityHighlanderPath))
@@ -317,6 +325,14 @@ public class ValidateCommand : AsyncCommand<BuildSettings>
                     {
                         options.IniRoots.Add(absoluteRoot);
                     }
+                }
+
+                // Extract cache path
+                var cachePath = SettingsJsonParser.ExtractCachePath(settingsJson);
+                if (!string.IsNullOrEmpty(cachePath))
+                {
+                    var absoluteCachePath = Path.IsPathRooted(cachePath) ? cachePath : Path.Combine(options.ProjectRoot, cachePath);
+                    options.ParserSettings.CachePath = absoluteCachePath;
                 }
             }
             catch (Exception ex)
