@@ -58,7 +58,19 @@ public sealed class SyntaxValidator : IValidator
 
                 case DirectiveType.Unknown:
                     var unknown = directive.Unknown!.Value;
-                    errors.Add(CreateOtherError(text, unknown));
+                    if (unknown.ErrorCode == ErrorCode.MalformedHeader)
+                    {
+                        errors.Add(CreateDiagnostic(
+                            ErrorCode.MalformedHeader,
+                            "Malformed section header: missing closing ']'",
+                            unknown.Span,
+                            text,
+                            DiagnosticSeverity.Error));
+                    }
+                    else
+                    {
+                        errors.Add(CreateOtherError(text, unknown));
+                    }
                     break;
             }
         }

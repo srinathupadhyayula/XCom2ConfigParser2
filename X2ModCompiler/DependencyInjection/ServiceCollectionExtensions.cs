@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.IO;
 using X2ModCompiler.Application;
 using X2ModCompiler.Compilation;
 using X2ModCompiler.Configuration;
@@ -35,10 +36,20 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ILoggerFactory>(sp =>
         {
             var logLevel = (Microsoft.Extensions.Logging.LogLevel)options.LogVerbosity;
+            // Use exe directory for log file (so it's alongside the exe in .scripts/)
+            var exeDir = AppContext.BaseDirectory;
+            var logDir = Path.Combine(exeDir, ".scripts");
+            if (!Directory.Exists(logDir))
+                Directory.CreateDirectory(logDir);
+            var logPath = Path.Combine(logDir, "build.log");
             return LoggerFactory.Create(builder =>
             {
                 builder.AddZLoggerConsole();
+                // File logger with plain text formatter (no ANSI escape codes)
+                builder.AddZLoggerFile(logPath, options => options.UsePlainTextFormatter());
                 builder.SetMinimumLevel(logLevel);
+                // Ensure Information level is logged for all categories
+                builder.AddFilter((category, level) => level >= logLevel);
             });
         });
 

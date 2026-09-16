@@ -3,6 +3,8 @@ using X2ModCompiler.Configuration;
 using X2ModCompiler.Core.Validation;
 using X2ModCompiler.Core.Core;
 using X2ModCompiler.Utilities;
+using System.Collections.Generic;
+using System.IO;
 
 namespace X2ModCompiler.Application.Steps;
 
@@ -23,29 +25,90 @@ public class ValidationStep : BuildStepBase
     {
         _logger.LogInformation("Performing configuration validation...");
 
-        var iniFiles = Directory.GetFiles(options.ProjectRoot, "*.ini", SearchOption.AllDirectories);
+        var iniFiles = DiscoverIniFiles(options);
+        foreach (var f in iniFiles)
+        {
+        }
         int errorCount = 0;
+        int warningCount = 0;
 
         foreach (var file in iniFiles)
         {
             var result = _fileProcessor.ProcessFile(file);
-            if (result.HasErrors)
+
+            foreach (var diag in result.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error))
             {
-                foreach (var diag in result.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error))
-                {
-                    _logger.LogError($"Validation Error in {Path.GetFileName(file)}: {diag.Message}");
-                }
-                errorCount += result.ErrorCount;
+                var formattedMessage = FormatDiagnostic(file, diag);
+                _logger.LogError(formattedMessage);
+                errorCount++;
+            }
+
+            foreach (var diag in result.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Warning))
+            {
+                var formattedMessage = FormatDiagnostic(file, diag);
+                _logger.LogWarning(formattedMessage);
+                warningCount++;
+            }
+
+            if (!result.HasErrors && !result.HasWarnings)
+            {
+                _logger.LogTrace($"Validated {Path.GetFileName(file)}");
             }
         }
 
+        // Store counts in options for BuildController to read
+        options.ConfigValidationErrors = errorCount;
+        options.ConfigValidationWarnings = warningCount;
+
+        // Log summary but ALWAYS return success (true)
         if (errorCount > 0)
         {
-            _logger.LogError($"Validation failed with {errorCount} errors.");
-            return false;
+            _logger.LogError($"Validation completed with {errorCount} error(s) and {warningCount} warning(s).");
+        }
+        else if (warningCount > 0)
+        {
+            _logger.LogWarning($"Validation completed with {warningCount} warning(s).");
+        }
+        else
+        {
+            _logger.LogInformation("Validation completed successfully.");
         }
 
-        _logger.LogInformation("Validation completed successfully.");
-        return await Task.FromResult(true);
+        return true;
+    }
+
+    /// <summary>
+    /// Discovers .ini files within the configured INI roots only.
+    /// This ensures the config parser does not scan outside the main mod's Config directory,
+    /// preventing reference directories (e.g. reference/) from being parsed.
+    /// </summary>
+    private static List<string> DiscoverIniFiles(BuildOptions options)
+    {
+        var files = new List<string>();
+        foreach (var root in options.IniRoots)
+        {
+            if (Directory.Exists(root))
+            {
+                files.AddRange(Directory.GetFiles(root, "*.ini", SearchOption.AllDirectories));
+            }
+        }
+        return files.Distinct().ToList();
+    }
+
+    /// <summary>
+    /// Formats a diagnostic for VS Code clickable output.
+    /// Format: file:line:column: severity: message
+    /// </summary>
+    private static string FormatDiagnostic(string filePath, Diagnostic diag)
+    {
+        var severityStr = diag.Severity switch
+        {
+            DiagnosticSeverity.Error => "error",
+            DiagnosticSeverity.Warning => "warning",
+            DiagnosticSeverity.Info => "info",
+            _ => "info"
+        };
+
+        return $"{filePath}:{diag.Location.Start.Line}:{diag.Location.Start.Column}: {severityStr}: {diag.Code}: {diag.Message}";
     }
 }

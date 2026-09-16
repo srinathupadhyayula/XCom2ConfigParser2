@@ -184,13 +184,15 @@ public class BuildCommand : AsyncCommand<BuildSettings>
             }
         }
 
-        // Extract IniRoots from .vscode/settings.json
+        // Extract settings from .vscode/settings.json
         var settingsPath = Path.Combine(options.ProjectRoot, ".vscode", "settings.json");
         if (File.Exists(settingsPath))
         {
             try
             {
                 var settingsJson = File.ReadAllText(settingsPath);
+                
+                // Extract IniRoots
                 var iniRoots = SettingsJsonParser.ExtractIniRoots(settingsJson);
                 foreach (var root in iniRoots)
                 {
@@ -198,6 +200,41 @@ public class BuildCommand : AsyncCommand<BuildSettings>
                     if (Directory.Exists(absoluteRoot))
                     {
                         options.IniRoots.Add(absoluteRoot);
+                    }
+                }
+
+                // Extract and apply log verbosity from VSCode settings
+                options.LogVerbosity = SettingsJsonParser.ExtractLogVerbosity(settingsJson);
+
+                // Extract AllModsRoot
+                var allModsRoot = SettingsJsonParser.ExtractAllModsRoot(settingsJson);
+                if (!string.IsNullOrEmpty(allModsRoot))
+                {
+                    var absoluteAllModsRoot = Path.IsPathRooted(allModsRoot) ? allModsRoot : Path.Combine(options.ProjectRoot, allModsRoot);
+                    if (Directory.Exists(absoluteAllModsRoot))
+                    {
+                        options.ParserSettings.AllModsRoot = absoluteAllModsRoot;
+                    }
+                }
+
+                // Extract Highlander paths
+                var communityHighlanderPath = SettingsJsonParser.ExtractCommunityHighlanderPath(settingsJson);
+                if (!string.IsNullOrEmpty(communityHighlanderPath))
+                {
+                    var absolutePath = Path.IsPathRooted(communityHighlanderPath) ? communityHighlanderPath : Path.Combine(options.ProjectRoot, communityHighlanderPath);
+                    if (Directory.Exists(absolutePath))
+                    {
+                        options.ParserSettings.CommunityHighlanderPath = absolutePath;
+                    }
+                }
+
+                var alienHighlanderPath = SettingsJsonParser.ExtractAlienHighlanderPath(settingsJson);
+                if (!string.IsNullOrEmpty(alienHighlanderPath))
+                {
+                    var absolutePath = Path.IsPathRooted(alienHighlanderPath) ? alienHighlanderPath : Path.Combine(options.ProjectRoot, alienHighlanderPath);
+                    if (Directory.Exists(absolutePath))
+                    {
+                        options.ParserSettings.AlienHighlanderPath = absolutePath;
                     }
                 }
             }

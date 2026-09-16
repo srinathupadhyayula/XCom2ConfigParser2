@@ -13,7 +13,9 @@ public record BuildResult(
     TimeSpan Duration,
     List<string> OutputPaths,
     List<string> Errors,
-    List<BuildTimingRecord> Timings);
+    List<BuildTimingRecord> Timings,
+    int ConfigErrorCount = 0,
+    int ConfigWarningCount = 0);
 
 /// <summary>
 /// Represents a timing entry for a specific build phase.

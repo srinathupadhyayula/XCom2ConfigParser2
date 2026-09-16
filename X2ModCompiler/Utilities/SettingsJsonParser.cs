@@ -59,4 +59,110 @@ public static class SettingsJsonParser
 
         return roots;
     }
+
+    /// <summary>
+    /// Extracts the log verbosity from settings.json.
+    /// </summary>
+    public static X2ModCompiler.Core.Configuration.CompilerLogLevel ExtractLogVerbosity(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json, new JsonDocumentOptions 
+            { 
+                AllowTrailingCommas = true, 
+                CommentHandling = JsonCommentHandling.Skip 
+            });
+            
+            if (doc.RootElement.TryGetProperty("X2ModCompiler.logVerbosity", out var prop) 
+                && prop.ValueKind == JsonValueKind.String)
+            {
+                var value = prop.GetString() ?? "Information";
+                if (Enum.TryParse<X2ModCompiler.Core.Configuration.CompilerLogLevel>(value, true, out var level))
+                    return level;
+            }
+        }
+        catch (JsonException)
+        {
+            // Ignore
+        }
+        return X2ModCompiler.Core.Configuration.CompilerLogLevel.Information;
+    }
+
+    /// <summary>
+    /// Extracts the AllModsRoot path from settings.json.
+    /// </summary>
+    public static string ExtractAllModsRoot(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json, new JsonDocumentOptions 
+            { 
+                AllowTrailingCommas = true, 
+                CommentHandling = JsonCommentHandling.Skip 
+            });
+            
+            if (doc.RootElement.TryGetProperty("X2ModCompiler.allModsRoot", out var prop) 
+                && prop.ValueKind == JsonValueKind.String)
+            {
+                return prop.GetString() ?? "";
+            }
+        }
+        catch (JsonException)
+        {
+            // Ignore
+        }
+        return "";
+    }
+
+    /// <summary>
+    /// Extracts the CommunityHighlander path from settings.json.
+    /// </summary>
+    public static string ExtractCommunityHighlanderPath(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json, new JsonDocumentOptions 
+            { 
+                AllowTrailingCommas = true, 
+                CommentHandling = JsonCommentHandling.Skip 
+            });
+            
+            if (doc.RootElement.TryGetProperty("X2ModCompiler.communityHighlanderPath", out var prop) 
+                && prop.ValueKind == JsonValueKind.String)
+            {
+                return prop.GetString() ?? "";
+            }
+        }
+        catch (JsonException)
+        {
+            // Ignore
+        }
+        return "";
+    }
+
+    /// <summary>
+    /// Extracts the AlienHighlander path from settings.json.
+    /// </summary>
+    public static string ExtractAlienHighlanderPath(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json, new JsonDocumentOptions 
+            { 
+                AllowTrailingCommas = true, 
+                CommentHandling = JsonCommentHandling.Skip 
+            });
+            
+            if (doc.RootElement.TryGetProperty("X2ModCompiler.alienHighlanderPath", out var prop) 
+                && prop.ValueKind == JsonValueKind.String)
+            {
+                return prop.GetString() ?? "";
+            }
+        }
+        catch (JsonException)
+        {
+            // Ignore
+        }
+        return "";
+    }
 }

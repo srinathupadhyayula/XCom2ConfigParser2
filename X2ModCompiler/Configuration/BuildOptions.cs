@@ -239,4 +239,16 @@ public class BuildOptions
 
         return errors;
     }
+
+    /// <summary>
+    /// Gets or sets the number of config validation errors found during the build.
+    /// Populated by ValidationStep for use in final build result.
+    /// </summary>
+    public int ConfigValidationErrors { get; set; }
+
+    /// <summary>
+    /// Gets or sets the number of config validation warnings found during the build.
+    /// Populated by ValidationStep for use in final build result.
+    /// </summary>
+    public int ConfigValidationWarnings { get; set; }
 }

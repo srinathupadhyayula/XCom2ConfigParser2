@@ -31,8 +31,12 @@ public class BuildPipeline
     {
         var timings = new List<BuildTimingRecord>();
 
+        System.Console.Error.WriteLine($"[PIPELINE DEBUG] Pipeline has {_steps.Count} steps: {string.Join(", ", _steps.Select(s => s.Name))}");
+
         foreach (var step in _steps)
         {
+            System.Console.Error.WriteLine($"[PIPELINE] Executing step: {step.Name}");
+            _logger.LogInformation($">>> STARTING STEP: {step.Name}");
             var sw = Stopwatch.StartNew();
 
             bool success = false;
@@ -56,7 +60,11 @@ public class BuildPipeline
             if (!success)
             {
                 _logger.LogError(LogColors.Error($"Exiting pipeline: {step.Name} failed. {errorMessage}"));
-                break;
+                // Don't break on validation step failure - config validation is non-fatal
+                if (step.Name != "Config Validation")
+                {
+                    break;
+                }
             }
         }
 

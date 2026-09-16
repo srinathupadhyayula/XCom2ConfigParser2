@@ -12,12 +12,16 @@ public readonly struct Unknown
     /// <summary>Gets the byte span of the previous line, used for diagnostics related to potentially malformed continuations.</summary>
     public Span? PreviousSpan { get; }
 
+    /// <summary>Gets the error code for this unknown directive, if applicable.</summary>
+    public ErrorCode? ErrorCode { get; }
+
     /// <summary>
     /// Initializes a new instance of the <see cref="Unknown"/> struct.
     /// </summary>
-    public Unknown(Span span, Span? previousSpan = null)
+    public Unknown(Span span, Span? previousSpan = null, ErrorCode? errorCode = null)
     {
         Span = span;
         PreviousSpan = previousSpan;
+        ErrorCode = errorCode;
     }
 }

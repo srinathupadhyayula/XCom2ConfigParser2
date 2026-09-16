@@ -160,7 +160,7 @@ public class BuildOptionsTests
         var cachePath = options.BuildCachePath;
 
         // Assert
-        Assert.Contains("BuildCache", cachePath);
+        Assert.Contains(".scripts", cachePath); Assert.Contains(".xcom2cache", cachePath);
         Assert.Contains("project", cachePath);
     }
 

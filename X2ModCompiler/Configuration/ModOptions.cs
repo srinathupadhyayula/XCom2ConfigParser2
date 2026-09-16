@@ -103,7 +103,7 @@ public sealed class PathOptions
     /// <summary>
     /// Gets the absolute path to the active build cache directory.
     /// </summary>
-    public string BuildCachePath(string projectRoot) => BuildCachePathOverride ?? Path.Combine(projectRoot, "BuildCache");
+    public string BuildCachePath(string projectRoot) => BuildCachePathOverride ?? Path.Combine(projectRoot, ".scripts", ".xcom2cache");
 
     /// <summary>
     /// Gets the absolute path to the UnrealEd 'XComGame.com' commandlet executable.

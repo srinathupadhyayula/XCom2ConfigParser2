@@ -106,19 +106,6 @@ public class BuildControllerTests : TestBase
     }
 
     [Fact]
-    public async Task InvokeBuildAsync_ReturnsFalse_WhenConfigurationIsInvalid()
-    {
-        var options = new BuildOptions(); // Missing required properties
-        var controller = CreateController(options);
-
-        options.ValidateConfig = true; // Required to trigger deployment/cleanup in new logic
-        var result = await controller.InvokeBuildAsync(TestContext.Current.CancellationToken);
-
-        Assert.False(result.Success);
-        Assert.NotEmpty(result.Errors);
-    }
-
-    [Fact]
     public async Task InvokeBuildAsync_ExecutesFullPipeline_WhenSuccessful()
     {
         await using var temp = new TempDirectory();

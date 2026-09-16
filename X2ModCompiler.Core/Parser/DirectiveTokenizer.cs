@@ -81,11 +81,12 @@ public static class DirectiveTokenizer
                 continue;
             }
 
-            // Check for malformed header (starts with [ but doesn't match pattern)
+            // Check for malformed header (starts with [ but doesn't match pattern - e.g., missing closing ])
             if (trimmed.StartsWith("["))
             {
+                // This is a malformed section header (missing closing ])
                 var span = new Span(lineStart, lineStart + trimmed.Length);
-                directives.Add(Directive.Section(new SectionHeader(span, new Span(lineStart + 1, lineStart + trimmed.Length - 1))));
+                directives.Add(Directive.UnknownDirective(new Unknown(span, errorCode: ErrorCode.MalformedHeader)));
                 continue;
             }
 

@@ -29,6 +29,12 @@ public class BuildTracker
         _cachePath = cachePath;
         _logger = logger;
         _fingerprintFile = Path.Combine(_cachePath, "lastBuildDetails.json");
+        
+        // Ensure cache directory exists
+        if (!Directory.Exists(_cachePath))
+        {
+            Directory.CreateDirectory(_cachePath);
+        }
     }
 
     /// <summary>
@@ -76,13 +82,13 @@ public class BuildTracker
         var currentMode = currentOptions.Debug ? "debug" : "release";
         if (fingerprint.BuildMode != currentMode)
         {
-            _logger.ZLogInformation($"Detected switch between debug and release build.");
+            _logger.LogDebug(LogColors.Info($"Detected switch between debug and release build."));
             return true;
         }
 
         if (fingerprint.GlobalsHash != globalsHash)
         {
-            _logger.ZLogInformation($"Detected change in macros (Globals.uci).");
+            _logger.LogDebug(LogColors.Info($"Detected change in macros (Globals.uci)."));
             return true;
         }
 
@@ -94,7 +100,7 @@ public class BuildTracker
         var fingerprint = await LoadFingerprintAsync(ct);
         if (fingerprint.CoreTimestamp != coreTimestamp)
         {
-            _logger.ZLogInformation($"Detected external rebuild of Core packages.");
+            _logger.LogDebug(LogColors.Info($"Detected external rebuild of Core packages."));
             return true;
         }
 
@@ -112,7 +118,7 @@ public class BuildTracker
         // First build - always rebuild
         if (string.IsNullOrEmpty(fingerprint.BuildMode))
         {
-            _logger.ZLogInformation($"First build - full rebuild required.");
+            _logger.LogInformation(LogColors.Info($"First build - full rebuild required."));
             return true;
         }
 
@@ -120,21 +126,21 @@ public class BuildTracker
         var currentMode = currentOptions.Debug ? "debug" : "release";
         if (fingerprint.BuildMode != currentMode)
         {
-            _logger.ZLogInformation($"Detected switch between debug and release build.");
+            _logger.LogDebug(LogColors.Info($"Detected switch between debug and release build."));
             return true;
         }
 
         // Check Globals.uci hash
         if (fingerprint.GlobalsHash != globalsHash)
         {
-            _logger.ZLogInformation($"Detected change in macros (Globals.uci).");
+            _logger.LogDebug(LogColors.Info($"Detected change in macros (Globals.uci)."));
             return true;
         }
 
         // Check Core.u timestamp if provided
         if (coreTimestamp.HasValue && fingerprint.CoreTimestamp != coreTimestamp.Value)
         {
-            _logger.ZLogInformation($"Detected external rebuild of Core packages.");
+            _logger.LogDebug(LogColors.Info($"Detected external rebuild of Core packages."));
             return true;
         }
 
@@ -164,7 +170,7 @@ public class BuildTracker
             // If source exists but compiled doesn't, we need to compile (but not necessarily clean)
             if (File.Exists(sourceFile) && !File.Exists(compiledFile))
             {
-                _logger.ZLogInformation($"Package {packageName}: source exists but no compiled .u found.");
+                _logger.LogInformation(LogColors.Info($"Package {packageName}: source exists but no compiled .u found."));
                 return false; // No cleanup needed, compiler will create new
             }
 
@@ -176,7 +182,7 @@ public class BuildTracker
 
                 if (sourceTime > compiledTime)
                 {
-                    _logger.ZLogInformation($"Package {packageName}: source modified ({sourceTime}) after compile ({compiledTime}).");
+                    _logger.LogInformation(LogColors.Info($"Package {packageName}: source modified ({sourceTime}) after compile ({compiledTime})."));
                     return true; // Cleanup needed
                 }
             }
@@ -194,7 +200,7 @@ public class BuildTracker
                 var currentTime = File.GetLastWriteTime(sourceFile);
                 if (currentTime > recordedTime)
                 {
-                    _logger.ZLogInformation($"Package {packageName}: source modified since last build.");
+                    _logger.LogInformation(LogColors.Info($"Package {packageName}: source modified since last build."));
                     return true;
                 }
             }
