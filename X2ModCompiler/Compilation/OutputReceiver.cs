@@ -279,11 +279,19 @@ public class MakeOutputReceiver : OutputReceiver
                 if (normalizedOrig.StartsWith(normalizedStaging, StringComparison.OrdinalIgnoreCase))
                 {
                     var remainder = normalizedOrig[normalizedStaging.Length..].TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                    var testPath = Path.Combine(checkPath, remainder);
-                    if (File.Exists(testPath))
+                    // Try the path directly, then under Src/ (the mod's local source root)
+                    var candidates = new[]
                     {
-                        var fullPath = Path.GetFullPath(testPath);
-                        return line.Replace(origPath, fullPath);
+                        Path.Combine(checkPath, remainder),
+                        Path.Combine(checkPath, "Src", remainder)
+                    };
+                    foreach (var testPath in candidates)
+                    {
+                        if (File.Exists(testPath))
+                        {
+                            var fullPath = Path.GetFullPath(testPath);
+                            return line.Replace(origPath, fullPath);
+                        }
                     }
                 }
             }

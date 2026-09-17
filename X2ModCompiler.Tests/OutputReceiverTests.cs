@@ -100,7 +100,7 @@ public class OutputReceiverTests : TestBase
         Directory.CreateDirectory(Path.GetDirectoryName(testFile)!);
         File.WriteAllText(testFile, "test");
 
-        var receiver = new MakeOutputReceiver(new[] { sourcePath }, @"C:\SDK", NullLogger.Instance);
+        var receiver = new MakeOutputReceiver(new[] { sourcePath }, @"C:\XCOM 2 War of the Chosen SDK", NullLogger.Instance);
 
         // Act - this should translate the path
         var sdkPath = @"C:\XCOM 2 War of the Chosen SDK\Development\Src\Test.uc(10) : Error";
